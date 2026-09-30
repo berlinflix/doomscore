@@ -20,7 +20,7 @@ supabase db push
 
 Dashboard → Authentication → Sign In / Providers:
 
-* **Apple**: enable, add your app's bundle ID (`com.yourcompany.doomscore`) as a
+* **Apple**: enable, add the app's bundle ID (`com.gridcc.doomscore`) as a
   client ID (native Sign in with Apple uses the ID token; no service ID/secret needed
   for iOS-only).
 * **Anonymous sign-ins**: enable (powers "quick start"). Consider enabling captcha later.
@@ -28,11 +28,11 @@ Dashboard → Authentication → Sign In / Providers:
 ## 3. Edge Functions
 
 ```bash
-supabase secrets set APNS_KEY_ID=XXXXXXXXXX APNS_TEAM_ID=ABCDE12345 APNS_BUNDLE_ID=com.yourcompany.doomscore
+supabase secrets set APNS_KEY_ID=ZL4A5C2JP8 APNS_TEAM_ID=5862BR3S2S APNS_BUNDLE_ID=com.gridcc.doomscore
 ```
 
 ```bash
-supabase secrets set APNS_PRIVATE_KEY="$(cat AuthKey_XXXXXXXXXX.p8)"
+supabase secrets set APNS_PRIVATE_KEY="$(cat AuthKey_ZL4A5C2JP8.p8)"
 ```
 
 ```bash
@@ -46,7 +46,10 @@ supabase functions deploy activity --no-verify-jwt
 (`--no-verify-jwt` because these functions authenticate the scoped device token
 themselves — see `config.toml`.)
 
-APNs key: developer.apple.com → Keys → + → Apple Push Notifications service.
+APNs key: the team already has a team-scoped key, **Gridcc FCM APNs Key** (`ZL4A5C2JP8`,
+Sandbox & Production). It works for every app in the team, so reuse its .p8 if you still
+have it. Otherwise create a new one: developer.apple.com → Keys → + → Apple Push Notifications
+service, and use its Key ID above.
 
 ## 4. Point the app at it
 
@@ -66,16 +69,12 @@ DS_SUPABASE_ANON_KEY = <anon or publishable key>
   Live Activity via APNs (update or push-to-start).
 * `functions/activity` — registers/removes Live Activity push tokens.
 
-## 6. Invite links (optional)
+## 6. Invite links + privacy page (doomscore.gridcc.tech)
 
-Host `web/` on your domain (Vercel/Netlify/Cloudflare Pages):
-
-* `/.well-known/apple-app-site-association` — replace `ABCDE12345.com.yourcompany.doomscore`
-  with your Team ID + bundle ID; serve as `application/json`, no redirect.
-* `/i/*` → `web/i/index.html` (rewrite rule), set your App Store ID.
-
-Set `DS_ASSOCIATED_DOMAIN` / `DS_INVITE_BASE_URL` in the xcconfig. Without a domain the
-app falls back to `doomscore://invite/CODE` links.
+`web/` is a static site: invite landing page (`/i/CODE`), `apple-app-site-association`
+(already set to `5862BR3S2S.com.gridcc.doomscore`), a home page and `/privacy`.
+Deploy it to Vercel with Root Directory `web` and add the domain `doomscore.gridcc.tech`
+(CNAME `doomscore` → `cname.vercel-dns.com`). Step-by-step: [docs/SETUP_MAC.md](../docs/SETUP_MAC.md#7-website-doomscoregridcctech-invite-links--privacy-policy).
 
 ## Costs
 

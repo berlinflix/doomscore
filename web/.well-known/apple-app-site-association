@@ -2,7 +2,7 @@
   "applinks": {
     "details": [
       {
-        "appIDs": ["ABCDE12345.com.yourcompany.doomscore"],
+        "appIDs": ["5862BR3S2S.com.gridcc.doomscore"],
         "components": [
           { "/": "/i/*", "comment": "Scroll Battle invite links" }
         ]

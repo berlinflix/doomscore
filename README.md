@@ -64,11 +64,10 @@ docs/                      Teardown, architecture, security, App Review, detecto
 The full walk-through, including the Apple Developer portal setup, is in
 **[docs/SETUP_MAC.md](docs/SETUP_MAC.md)**. The short version:
 
-1. In the Apple Developer portal, register the App Group and three App IDs (app, `.widgets`,
-   `.broadcast`) with the capabilities listed in the guide.
-2. Copy `Config/Secrets.example.xcconfig` to `Config/Secrets.xcconfig` and set your Team ID,
-   bundle ID and App Group.
-3. Install XcodeGen, generate the project and open it:
+1. The Apple Developer portal is already set up (App Group + three App IDs under
+   `com.gridcc.doomscore`), and `Config/Base.xcconfig` already holds the Team ID, bundle IDs
+   and the `doomscore.gridcc.tech` domain.
+2. Install XcodeGen, generate the project and open it:
 
 ```bash
 brew install xcodegen
@@ -82,10 +81,10 @@ xcodegen generate
 open Doomscore.xcodeproj
 ```
 
-4. Run on a real iPhone (ReplayKit broadcasts don't run in the Simulator), arm the counter
+3. Run on a real iPhone (ReplayKit broadcasts don't run in the Simulator), arm the counter
    and scroll some reels.
-5. Set up the Shortcuts automation so opening Instagram starts things by itself.
-6. Optional: set up the backend in [backend/README.md](backend/README.md) for battles and
+4. Set up the Shortcuts automation so opening Instagram starts things by itself.
+5. Optional: set up the backend in [backend/README.md](backend/README.md) for battles and
    live Dynamic Island updates. Without it, the app runs in local-only mode.
 
 Tests: pick an iPhone Simulator and press ⌘U.

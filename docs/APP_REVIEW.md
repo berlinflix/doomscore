@@ -1,12 +1,13 @@
 # App Store submission notes
 
-## Capabilities to enable (developer.apple.com → Identifiers)
+## Capabilities (already registered on team 5862BR3S2S)
 
-* App ID `com.yourcompany.doomscore`: App Groups, Sign in with Apple, Push Notifications,
-  Associated Domains, Time Sensitive Notifications.
-* `com.yourcompany.doomscore.widgets` and `com.yourcompany.doomscore.broadcast`: App Groups.
-* App Group `group.com.yourcompany.doomscore` on all three.
-* APNs Auth Key (.p8) for Live Activity pushes → Supabase secrets.
+* App ID `com.gridcc.doomscore`: App Groups, Sign In with Apple, Push Notifications,
+  Associated Domains, Time Sensitive Notifications (+ In-App Purchase, on by default).
+* `com.gridcc.doomscore.widgets` and `com.gridcc.doomscore.broadcast`: App Groups.
+* App Group `group.com.gridcc.doomscore`, linked to all three.
+* APNs: the team-scoped "Gridcc FCM APNs Key" (`ZL4A5C2JP8`) also works for Doomscore.
+* Privacy policy URL: `https://doomscore.gridcc.tech/privacy`.
 
 ## Review notes (paste into App Store Connect)
 

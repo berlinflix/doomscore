@@ -1,0 +1,2 @@
+# Netlify / Cloudflare Pages: serve the invite page for every /i/<code> link.
+/i/*  /i/index.html  200

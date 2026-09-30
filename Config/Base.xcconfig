@@ -6,19 +6,18 @@
 
 DS_APP_NAME = Doomscore
 
-// Your Apple Developer Team ID (Membership page on developer.apple.com).
-DS_TEAM_ID = ABCDE12345
+// Apple Developer Team ID (shown next to your name on developer.apple.com).
+DS_TEAM_ID = 5862BR3S2S
 
 // Bundle ID of the app. Extensions are derived from it (<id>.widgets, <id>.broadcast).
-DS_APP_BUNDLE_ID = com.yourcompany.doomscore
+DS_APP_BUNDLE_ID = com.gridcc.doomscore
 
 // App Group shared by the app, widgets and the broadcast extension.
-DS_APP_GROUP_ID = group.com.yourcompany.doomscore
+DS_APP_GROUP_ID = group.com.gridcc.doomscore
 
-// Domain that hosts web/.well-known/apple-app-site-association (invite links).
-// Leave the placeholder until you own a domain: invites then use doomscore:// links.
-DS_ASSOCIATED_DOMAIN = yourdomain.com
-DS_INVITE_BASE_URL =
+// Subdomain that hosts web/ (invite links, AASA file, privacy policy).
+DS_ASSOCIATED_DOMAIN = doomscore.gridcc.tech
+DS_INVITE_BASE_URL = https:/$()/doomscore.gridcc.tech/i
 
 // Your own Supabase project (backend/README.md). Leave the placeholders to run
 // the app in local-only mode (counting, widgets and recaps still work).
