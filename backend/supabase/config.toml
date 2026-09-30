@@ -1,0 +1,11 @@
+# Minimal Supabase CLI config for Doomscore. `supabase link --project-ref <ref>`
+# fills in the rest. Both functions authenticate with the scoped device token
+# themselves, so the gateway's JWT check is disabled for them.
+
+project_id = "doomscore"
+
+[functions.ingest]
+verify_jwt = false
+
+[functions.activity]
+verify_jwt = false

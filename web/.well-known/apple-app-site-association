@@ -1,0 +1,12 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["ABCDE12345.com.yourcompany.doomscore"],
+        "components": [
+          { "/": "/i/*", "comment": "Scroll Battle invite links" }
+        ]
+      }
+    ]
+  }
+}

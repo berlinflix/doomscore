@@ -1,0 +1,40 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Doomscore build configuration. Edit these values, then run `xcodegen generate`.
+// Values are injected into the Info.plist of every target (see project.yml).
+// NOTE: "//" starts a comment in xcconfig files, so URLs use the https:/$()/ trick.
+// ─────────────────────────────────────────────────────────────────────────────
+
+DS_APP_NAME = Doomscore
+
+// Your Apple Developer Team ID (Membership page on developer.apple.com).
+DS_TEAM_ID = ABCDE12345
+
+// Bundle ID of the app. Extensions are derived from it (<id>.widgets, <id>.broadcast).
+DS_APP_BUNDLE_ID = com.yourcompany.doomscore
+
+// App Group shared by the app, widgets and the broadcast extension.
+DS_APP_GROUP_ID = group.com.yourcompany.doomscore
+
+// Domain that hosts web/.well-known/apple-app-site-association (invite links).
+// Leave the placeholder until you own a domain: invites then use doomscore:// links.
+DS_ASSOCIATED_DOMAIN = yourdomain.com
+DS_INVITE_BASE_URL =
+
+// Your own Supabase project (backend/README.md). Leave the placeholders to run
+// the app in local-only mode (counting, widgets and recaps still work).
+DS_SUPABASE_URL = https:/$()/YOUR-PROJECT-REF.supabase.co
+DS_SUPABASE_ANON_KEY = YOUR_SUPABASE_ANON_KEY
+
+// Optional: URL of a JSON detector config (see docs/DETECTOR_TUNING.md) so you
+// can ship keyword/threshold fixes when Instagram changes its UI.
+DS_REMOTE_CONFIG_URL =
+
+// Swift compilation flags.
+// DS_INTENT_MODES enables the iOS 26 App Intents "supportedModes" API so the
+// Shortcuts automation can open the arm screen by itself. If your Xcode version
+// complains about App/Intents/ForegroundContinuation.swift, remove the flag —
+// the app falls back to a Live Activity + notification nudge.
+DS_SWIFT_FLAGS = DS_INTENT_MODES
+
+// Keep real keys out of git: put overrides in Config/Secrets.xcconfig.
+#include? "Secrets.xcconfig"

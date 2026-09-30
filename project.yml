@@ -1,0 +1,189 @@
+# XcodeGen spec — run `xcodegen generate` on a Mac to produce Doomscore.xcodeproj.
+# Edit Config/Base.xcconfig (team id, bundle ids, backend keys) before generating.
+
+name: Doomscore
+
+options:
+  bundleIdPrefix: com.yourcompany
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+  groupSortPosition: top
+  postGenCommand: echo "Doomscore.xcodeproj generated. Open it and pick your signing team if Xcode asks."
+
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: $(DS_TEAM_ID)
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
+    ENABLE_PREVIEWS: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+  configs:
+    Debug:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG $(DS_SWIFT_FLAGS)
+      SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+    Release:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(DS_SWIFT_FLAGS)
+      SWIFT_COMPILATION_MODE: wholemodule
+      SWIFT_OPTIMIZATION_LEVEL: "-O"
+
+targets:
+  # ───────────────────────────── Main app ─────────────────────────────
+  Doomscore:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Shared
+      - path: Detection/DetectorConfig.swift
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: $(DS_APP_NAME)
+        LSApplicationCategoryType: public.app-category.lifestyle
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UIUserInterfaceStyle: Dark
+        ITSAppUsesNonExemptEncryption: false
+        NSSupportsLiveActivities: true
+        NSSupportsLiveActivitiesFrequentUpdates: true
+        UIBackgroundModes: [fetch]
+        BGTaskSchedulerPermittedIdentifiers: [$(DS_APP_BUNDLE_ID).refresh]
+        LSApplicationQueriesSchemes: [instagram, youtube, snssdk1233, tiktok, snapchat, shortcuts]
+        CFBundleURLTypes:
+          - CFBundleURLName: $(DS_APP_BUNDLE_ID)
+            CFBundleURLSchemes: [doomscore]
+        DSAppGroupID: $(DS_APP_GROUP_ID)
+        DSBroadcastExtensionID: $(DS_APP_BUNDLE_ID).broadcast
+        DSSupabaseURL: $(DS_SUPABASE_URL)
+        DSSupabaseAnonKey: $(DS_SUPABASE_ANON_KEY)
+        DSInviteBaseURL: $(DS_INVITE_BASE_URL)
+        DSRemoteConfigURL: $(DS_REMOTE_CONFIG_URL)
+    entitlements:
+      path: App/Doomscore.entitlements
+      properties:
+        com.apple.security.application-groups: [$(DS_APP_GROUP_ID)]
+        com.apple.developer.applesignin: [Default]
+        aps-environment: development
+        com.apple.developer.usernotifications.time-sensitive: true
+        com.apple.developer.associated-domains: [applinks:$(DS_ASSOCIATED_DOMAIN)]
+    settings:
+      base:
+        PRODUCT_NAME: Doomscore
+        PRODUCT_BUNDLE_IDENTIFIER: $(DS_APP_BUNDLE_ID)
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SUPPORTS_MACCATALYST: NO
+    dependencies:
+      - target: DoomscoreWidgets
+      - target: DoomscoreBroadcast
+
+  # ─────────────── Widgets + Live Activity + Control Center ───────────────
+  DoomscoreWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widgets
+      - path: Shared/Core
+      - path: Shared/UI
+      - path: Shared/Intents
+    info:
+      path: Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: Doomscore Widgets
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        DSAppGroupID: $(DS_APP_GROUP_ID)
+        DSSupabaseURL: $(DS_SUPABASE_URL)
+        DSSupabaseAnonKey: $(DS_SUPABASE_ANON_KEY)
+    entitlements:
+      path: Widgets/DoomscoreWidgets.entitlements
+      properties:
+        com.apple.security.application-groups: [$(DS_APP_GROUP_ID)]
+    settings:
+      base:
+        PRODUCT_NAME: DoomscoreWidgets
+        PRODUCT_BUNDLE_IDENTIFIER: $(DS_APP_BUNDLE_ID).widgets
+        SKIP_INSTALL: YES
+
+  # ───────────── Broadcast Upload Extension (the reel detector) ─────────────
+  DoomscoreBroadcast:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Broadcast
+      - path: Detection
+      - path: Shared/Core
+    info:
+      path: Broadcast/Info.plist
+      properties:
+        CFBundleDisplayName: $(DS_APP_NAME)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.broadcast-services-upload
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SampleHandler
+          RPBroadcastProcessMode: RPBroadcastProcessModeSampleBuffer
+        DSAppGroupID: $(DS_APP_GROUP_ID)
+        DSSupabaseURL: $(DS_SUPABASE_URL)
+        DSSupabaseAnonKey: $(DS_SUPABASE_ANON_KEY)
+    entitlements:
+      path: Broadcast/DoomscoreBroadcast.entitlements
+      properties:
+        com.apple.security.application-groups: [$(DS_APP_GROUP_ID)]
+    settings:
+      base:
+        PRODUCT_NAME: DoomscoreBroadcast
+        PRODUCT_BUNDLE_IDENTIFIER: $(DS_APP_BUNDLE_ID).broadcast
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+
+  # ───────────────────────────── Unit tests ─────────────────────────────
+  DoomscoreTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+      - path: Detection
+      - path: Shared/Core
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: $(DS_APP_BUNDLE_ID).tests
+
+schemes:
+  Doomscore:
+    build:
+      targets:
+        Doomscore: all
+        DoomscoreTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: true
+      targets:
+        - DoomscoreTests
+    archive:
+      config: Release
+  DoomscoreBroadcast:
+    build:
+      targets:
+        DoomscoreBroadcast: all
+        Doomscore: all
+    run:
+      config: Debug
+      askForAppToLaunch: true
+      debugEnabled: true
