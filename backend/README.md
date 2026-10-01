@@ -4,7 +4,7 @@ Everything here is new and yours — nothing talks to BrainPal's servers.
 
 **Live project:** `doomscore` · ref `aybvdsufopdgyegdinpx` · region Mumbai (ap-south-1) ·
 `https://aybvdsufopdgyegdinpx.supabase.co`. The migration, auth providers, both Edge Functions
-and the APNs secrets (except `APNS_PRIVATE_KEY`) are already applied. The steps below are for
+and all four APNs secrets (key `VD2P5T3639`) are already applied. The steps below are for
 rebuilding it or setting up another environment.
 
 ## 1. Create the project
@@ -37,11 +37,11 @@ into the Supabase dashboard (Edge Functions → Deploy a new function → Via Ed
 "Verify JWT" turned off).
 
 ```bash
-supabase secrets set APNS_KEY_ID=ZL4A5C2JP8 APNS_TEAM_ID=5862BR3S2S APNS_BUNDLE_ID=com.gridcc.doomscore
+supabase secrets set APNS_KEY_ID=VD2P5T3639 APNS_TEAM_ID=5862BR3S2S APNS_BUNDLE_ID=com.gridcc.doomscore
 ```
 
 ```bash
-supabase secrets set APNS_PRIVATE_KEY="$(cat AuthKey_ZL4A5C2JP8.p8)"
+supabase secrets set APNS_PRIVATE_KEY="$(cat AuthKey_VD2P5T3639.p8)"
 ```
 
 ```bash
@@ -55,10 +55,7 @@ supabase functions deploy activity --no-verify-jwt
 (`--no-verify-jwt` because these functions authenticate the scoped device token
 themselves — see `config.toml`.)
 
-APNs key: the team already has a team-scoped key, **Gridcc FCM APNs Key** (`ZL4A5C2JP8`,
-Sandbox & Production). It works for every app in the team, so reuse its .p8 if you still
-have it. Otherwise create a new one: developer.apple.com → Keys → + → Apple Push Notifications
-service, and use its Key ID above.
+APNs key: "Doomscore APNs" (`VD2P5T3639`, Sandbox & Production, team scoped) on team `5862BR3S2S`.
 
 ## 4. Point the app at it
 

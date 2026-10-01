@@ -6,7 +6,7 @@
   Associated Domains, Time Sensitive Notifications (+ In-App Purchase, on by default).
 * `com.gridcc.doomscore.widgets` and `com.gridcc.doomscore.broadcast`: App Groups.
 * App Group `group.com.gridcc.doomscore`, linked to all three.
-* APNs: the team-scoped "Gridcc FCM APNs Key" (`ZL4A5C2JP8`) also works for Doomscore.
+* APNs: dedicated "Doomscore APNs" key `VD2P5T3639` (Sandbox & Production, team scoped).
 * Privacy policy URL: `https://doomscore.gridcc.tech/privacy/`.
 
 ## Review notes (paste into App Store Connect)

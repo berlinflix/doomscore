@@ -106,14 +106,12 @@ Supabase project **doomscore** (`aybvdsufopdgyegdinpx`, Mumbai) is set up:
 - Database: tables, Row-Level Security, invites, leaderboard and anti-cheat functions.
 - Auth: Sign in with Apple (client `com.gridcc.doomscore`, users without email allowed) and anonymous sign-ins.
 - Edge Functions `ingest` and `activity`, with "Verify JWT" off because they check the app's device token themselves.
-- Secrets `APNS_TEAM_ID`, `APNS_BUNDLE_ID` and `APNS_KEY_ID` (`ZL4A5C2JP8`).
+- Secrets `APNS_TEAM_ID`, `APNS_BUNDLE_ID`, `APNS_KEY_ID` (`VD2P5T3639`, the dedicated "Doomscore APNs" key) and `APNS_PRIVATE_KEY`.
 - `Config/Base.xcconfig` already points at it.
 
-**One thing left for live Dynamic Island updates:** add the secret `APNS_PRIVATE_KEY`.
-In Supabase → Edge Functions → Secrets, paste the full contents of the `.p8` file for key
-`ZL4A5C2JP8` (Gridcc FCM APNs Key). If you no longer have that file, create a new APNs key
-under developer.apple.com → Keys, then update `APNS_KEY_ID` to the new key's ID and paste its `.p8`.
-Without it, everything else still works; the Dynamic Island just refreshes less often.
+Live Dynamic Island updates are fully configured. Keep the downloaded `AuthKey_VD2P5T3639.p8` safe
+and never commit it. If you ever lose it, create a new APNs key and replace both `APNS_KEY_ID` and
+`APNS_PRIVATE_KEY` in Supabase → Edge Functions → Secrets.
 
 ## 9. Debugging and tests
 
