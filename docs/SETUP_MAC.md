@@ -97,7 +97,10 @@ git push --force https://github.com/berlinflix/doomscore-site.git site-deploy:ma
 ```
 
 - Check it: `https://doomscore.gridcc.tech/.well-known/apple-app-site-association` should show JSON,
-  and `https://doomscore.gridcc.tech/privacy/` should show the policy.
+  and `https://doomscore.gridcc.tech/privacy/` should show the policy. HTTPS is enforced.
+- On a network that blocks `.tech` sites (e.g. college Wi-Fi), check Apple's copy instead:
+  `https://app-site-association.cdn-apple.com/a/v1/doomscore.gridcc.tech`. If it shows the same JSON,
+  Apple can reach your site and invite links will open the app.
 
 ## 8. Backend (battles + live Dynamic Island) — already live
 
@@ -136,4 +139,4 @@ and never commit it. If you ever lose it, create a new APNs key and replace both
 | Doomscore missing from the Start Broadcast sheet | Fix DoomscoreBroadcast signing, delete the app from the phone, run again |
 | Count stays at 0 | Detector lab; also Settings → "count these apps" |
 | Doomscore actions missing in Shortcuts | Open the app once, then force-quit and reopen Shortcuts |
-| Invite links open Safari instead of the app | Check the AASA URL from step 7 loads, then reinstall the app (iOS fetches the file at install time) |
+| Invite links open Safari instead of the app | Check Apple's CDN URL from step 7 shows the JSON, then reinstall the app (iOS fetches the file at install time) |
