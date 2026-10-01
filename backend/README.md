@@ -27,6 +27,10 @@ Dashboard → Authentication → Sign In / Providers:
 
 ## 3. Edge Functions
 
+Each function is a single self-contained `index.ts`, so you can deploy it with the CLI or paste it
+into the Supabase dashboard (Edge Functions → Deploy a new function → Via Editor, with
+"Verify JWT" turned off).
+
 ```bash
 supabase secrets set APNS_KEY_ID=ZL4A5C2JP8 APNS_TEAM_ID=5862BR3S2S APNS_BUNDLE_ID=com.gridcc.doomscore
 ```
@@ -71,10 +75,10 @@ DS_SUPABASE_ANON_KEY = <anon or publishable key>
 
 ## 6. Invite links + privacy page (doomscore.gridcc.tech)
 
-`web/` is a static site: invite landing page (`/i/CODE`), `apple-app-site-association`
-(already set to `5862BR3S2S.com.gridcc.doomscore`), a home page and `/privacy`.
-Deploy it to Vercel with Root Directory `web` and add the domain `doomscore.gridcc.tech`
-(CNAME `doomscore` → `cname.vercel-dns.com`). Step-by-step: [docs/SETUP_MAC.md](../docs/SETUP_MAC.md#7-website-doomscoregridcctech-invite-links--privacy-policy).
+`web/` is a static site: invite landing page (`/i/CODE`, plus `404.html` for GitHub Pages),
+`apple-app-site-association` (set to `5862BR3S2S.com.gridcc.doomscore`), a home page and
+`/privacy/`. It's published with GitHub Pages from `berlinflix/doomscore-site`; see
+[docs/SETUP_MAC.md](../docs/SETUP_MAC.md) step 7.
 
 ## Costs
 

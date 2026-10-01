@@ -81,18 +81,23 @@ open Doomscore.xcodeproj
 
 ## 7. Website: doomscore.gridcc.tech (invite links + privacy policy)
 
-1. On [vercel.com](https://vercel.com), go to Add New → Project and import `berlinflix/doomscore`.
-   - Set **Root Directory** to `web` and **Framework Preset** to *Other*, then Deploy.
-2. Project → Settings → **Domains** → add `doomscore.gridcc.tech`.
-   Vercel shows you a DNS record, usually **CNAME** `doomscore` → `cname.vercel-dns.com`.
-3. Add that record wherever `gridcc.tech`'s DNS is managed. It only adds a subdomain; your
-   other app's records stay as they are.
-4. In `web/privacy/index.html`, replace `YOUR-CONTACT-EMAIL` with your email, then commit and push.
-   Vercel redeploys by itself.
-5. Check it: `https://doomscore.gridcc.tech/.well-known/apple-app-site-association` should show JSON,
-   and `https://doomscore.gridcc.tech/privacy` should show the policy.
+Hosted on **GitHub Pages** from the public repo `berlinflix/doomscore-site`, which holds only the
+contents of `web/`. Your app code stays private.
 
-Netlify or Cloudflare Pages work too; `web/_redirects` and `web/_headers` are included for them.
+- DNS (Namecheap → gridcc.tech → Advanced DNS): `CNAME` record, host `doomscore`, value `berlinflix.github.io.`
+  Your GitHub Pages records for `gridcc.tech` itself are untouched.
+- To update the site after editing `web/` in this repo:
+
+```bash
+git subtree split --prefix web -b site-deploy
+```
+
+```bash
+git push --force https://github.com/berlinflix/doomscore-site.git site-deploy:main
+```
+
+- Check it: `https://doomscore.gridcc.tech/.well-known/apple-app-site-association` should show JSON,
+  and `https://doomscore.gridcc.tech/privacy/` should show the policy.
 
 ## 8. Backend (battles + live Dynamic Island), optional
 
@@ -119,7 +124,7 @@ and run `xcodegen generate`.
 1. App Store Connect → Apps → **+** → New App → iOS, bundle ID `com.gridcc.doomscore`,
    SKU `doomscore`. The name has to be unique on the App Store.
 2. Xcode → Product → **Archive** → Distribute App → App Store Connect → Upload → add testers in TestFlight.
-3. Before review, add the privacy policy URL `https://doomscore.gridcc.tech/privacy`, fill in the
+3. Before review, add the privacy policy URL `https://doomscore.gridcc.tech/privacy/`, fill in the
    privacy labels, and attach a demo video. See [APP_REVIEW.md](APP_REVIEW.md).
 
 ## Troubleshooting

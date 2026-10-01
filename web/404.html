@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scroll Battle invite · Doomscore</title>
+  <meta name="description" content="You've been challenged to a scroll battle on Doomscore.">
+  <!-- Replace 0000000000 with your App Store ID once the app is live. -->
+  <meta name="apple-itunes-app" content="app-id=0000000000">
+  <style>
+    :root { --bg: #09090f; --surface: #14141d; --text: #f4f4fa; --dim: #9c9cb2; --lime: #c6ff3d; --cyan: #3de0ff; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px;
+           background: radial-gradient(circle at 20% 10%, #2a1d52 0%, var(--bg) 55%); color: var(--text);
+           font-family: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, sans-serif; }
+    main { width: 100%; max-width: 420px; text-align: center; background: var(--surface); border-radius: 28px;
+           padding: 32px 24px; border: 1px solid rgba(255,255,255,.08); }
+    h1 { font-size: 30px; margin: 12px 0 8px; font-weight: 900; }
+    p { color: var(--dim); font-size: 16px; line-height: 1.4; margin: 0 0 24px; }
+    .emoji { font-size: 64px; }
+    .code { font-family: ui-monospace, monospace; letter-spacing: 3px; font-size: 20px; color: var(--lime); margin-bottom: 24px; }
+    a.button { display: block; padding: 18px; border-radius: 999px; font-weight: 900; font-size: 18px; text-decoration: none;
+               color: #000; background: linear-gradient(135deg, var(--lime), var(--cyan)); margin-bottom: 12px; }
+    a.ghost { display: block; padding: 16px; border-radius: 999px; color: var(--text); text-decoration: none; font-weight: 700;
+              background: #1d1d2a; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="emoji">⚔️</div>
+    <h1>you've been challenged</h1>
+    <p>a friend wants to battle you on Doomscore — whoever scrolls the most reels today is the most cooked. only reel counts are shared.</p>
+    <div class="code" id="code"></div>
+    <a class="button" id="open" href="#">open in Doomscore</a>
+    <a class="ghost" href="https://apps.apple.com/app/id0000000000">get the app</a>
+  </main>
+  <script>
+    // GitHub Pages serves this page for every unknown path, so /i/CODE lands here.
+    // /i/CODE → doomscore://invite/CODE (universal links open the app directly when installed)
+    if (!location.pathname.startsWith('/i/')) { location.replace('/'); }
+    const code = (location.pathname.split("/").filter(Boolean)[1] || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+    document.getElementById("code").textContent = code;
+    document.getElementById("open").href = "doomscore://invite/" + code;
+  </script>
+</body>
+</html>

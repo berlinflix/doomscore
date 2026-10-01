@@ -1,13 +1,119 @@
-// POST /functions/v1/ingest
-// Called by the broadcast extension (every few seconds while counting) and by
-// the app (catch-up sync). Auth: scoped device token in `x-device-token`.
+// POST /functions/v1/ingest — single-file Edge Function (paste-able into the Supabase dashboard).
+// Called by the broadcast extension (every few seconds while counting) and by the app
+// (catch-up sync). Auth: scoped device token in the `x-device-token` header.
 // Body: { day, tzOffsetMinutes, apps: [{app, reels, watchSeconds, adsSkipped}],
 //         live?: {todayCount, sessionCount, goal, armed, appName, sessionStarted},
 //         clientTime, appVersion }
-import { admin, authenticateDevice, background, isInt, isRecord, json, readJson } from "../_shared/http.ts";
-import { apnsConfigured, isDeadToken, sendLiveActivityPush } from "../_shared/apns.ts";
+// Secrets (optional, for Dynamic Island updates): APNS_KEY_ID, APNS_TEAM_ID,
+// APNS_PRIVATE_KEY (.p8 contents), APNS_BUNDLE_ID.
+import { createClient } from "npm:@supabase/supabase-js@2";
+
+const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
 
 const APPS = new Set(["instagram", "youtube", "tiktok", "snapchat", "other"]);
+
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json", "cache-control": "no-store" },
+  });
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isInt(value: unknown, min: number, max: number): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
+}
+
+// ─── APNs (Live Activity pushes) ────────────────────────────────────────────
+
+const APNS_KEY_ID = Deno.env.get("APNS_KEY_ID") ?? "";
+const APNS_TEAM_ID = Deno.env.get("APNS_TEAM_ID") ?? "";
+const APNS_PRIVATE_KEY = Deno.env.get("APNS_PRIVATE_KEY") ?? "";
+const APNS_BUNDLE_ID = Deno.env.get("APNS_BUNDLE_ID") ?? "";
+const apnsConfigured = APNS_KEY_ID !== "" && APNS_TEAM_ID !== "" && APNS_PRIVATE_KEY !== "" && APNS_BUNDLE_ID !== "";
+
+let cachedJwt: { token: string; issuedAt: number } | null = null;
+let cachedKey: CryptoKey | null = null;
+
+function base64url(bytes: Uint8Array): string {
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function pemToDer(pem: string): Uint8Array {
+  const body = pem.replace(/-----(BEGIN|END) PRIVATE KEY-----/g, "").replace(/\\n/g, "").replace(/\s+/g, "");
+  const binary = atob(body);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
+/** ES256 provider token, cached for 50 minutes (Apple allows up to 60). */
+async function providerToken(): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  if (cachedJwt && now - cachedJwt.issuedAt < 50 * 60) return cachedJwt.token;
+  if (!cachedKey) {
+    cachedKey = await crypto.subtle.importKey("pkcs8", pemToDer(APNS_PRIVATE_KEY), { name: "ECDSA", namedCurve: "P-256" }, false, [
+      "sign",
+    ]);
+  }
+  const encoder = new TextEncoder();
+  const header = base64url(encoder.encode(JSON.stringify({ alg: "ES256", kid: APNS_KEY_ID })));
+  const claims = base64url(encoder.encode(JSON.stringify({ iss: APNS_TEAM_ID, iat: now })));
+  const signingInput = `${header}.${claims}`;
+  // WebCrypto returns the raw r||s (IEEE P1363) signature that JWS expects.
+  const signature = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, cachedKey, encoder.encode(signingInput)));
+  const token = `${signingInput}.${base64url(signature)}`;
+  cachedJwt = { token, issuedAt: now };
+  return token;
+}
+
+interface ApnsResult {
+  status: number;
+  reason?: string;
+}
+
+async function sendLiveActivityPush(deviceToken: string, env: string, payload: Record<string, unknown>, priority: 5 | 10): Promise<ApnsResult> {
+  const host = env === "production" ? "api.push.apple.com" : "api.sandbox.push.apple.com";
+  const response = await fetch(`https://${host}/3/device/${deviceToken}`, {
+    method: "POST",
+    headers: {
+      authorization: `bearer ${await providerToken()}`,
+      "apns-topic": `${APNS_BUNDLE_ID}.push-type.liveactivity`,
+      "apns-push-type": "liveactivity",
+      "apns-priority": String(priority),
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (response.status === 200) return { status: 200 };
+  let reason: string | undefined;
+  try {
+    reason = (await response.json())?.reason;
+  } catch {
+    reason = undefined;
+  }
+  return { status: response.status, reason };
+}
+
+function isDeadToken(result: ApnsResult): boolean {
+  return result.status === 410 || result.reason === "BadDeviceToken" || result.reason === "Unregistered" || result.reason === "ExpiredToken";
+}
+
+// ─── request handling ───────────────────────────────────────────────────────
 
 interface AppTotal {
   app: string;
@@ -50,7 +156,7 @@ function parse(body: unknown): { day: string; apps: AppTotal[]; live?: Live } | 
       sessionCount: l.sessionCount,
       goal: l.goal,
       armed: l.armed,
-      appName: l.appName.slice(0, 24),
+      appName: (l.appName as string).slice(0, 24),
       sessionStarted: l.sessionStarted,
     };
   }
@@ -60,18 +166,32 @@ function parse(body: unknown): { day: string; apps: AppTotal[]; live?: Live } | 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
-  const auth = await authenticateDevice(req);
-  if (auth instanceof Response) return auth;
+  // Authenticate the scoped device token (only its SHA-256 is stored server-side).
+  const token = req.headers.get("x-device-token") ?? "";
+  if (!/^[0-9a-f]{64}$/.test(token)) return json({ error: "unauthorized" }, 401);
+  const tokenHash = await sha256Hex(token);
+  const { data: userId, error: authError } = await admin.rpc("device_user", { p_token_hash: tokenHash });
+  if (authError) {
+    console.error("device_user failed", authError.message);
+    return json({ error: "server_error" }, 500);
+  }
+  if (!userId) return json({ error: "unauthorized" }, 401);
 
-  const body = await readJson(req);
-  if (body instanceof Response) return body;
+  const raw = await req.text();
+  if (raw.length > 8192) return json({ error: "payload_too_large" }, 413);
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return json({ error: "bad_json" }, 400);
+  }
   const parsed = parse(body);
   if (typeof parsed === "string") return json({ error: parsed }, 400);
 
   if (parsed.apps.length > 0) {
     const { data, error } = await admin.rpc("ingest_stats", {
-      p_user: auth.userId,
-      p_device_hash: auth.tokenHash,
+      p_user: userId,
+      p_device_hash: tokenHash,
       p_day: parsed.day,
       p_rows: parsed.apps,
     });
@@ -84,10 +204,12 @@ Deno.serve(async (req) => {
     }
   }
 
-  if (parsed.live && apnsConfigured()) {
-    const work = mirrorToLiveActivity(auth.userId, parsed.live).catch((e) => console.error("apns", e));
-    const pending = background(work);
-    if (pending) await pending;
+  if (parsed.live && apnsConfigured) {
+    try {
+      await mirrorToLiveActivity(userId as string, parsed.live);
+    } catch (e) {
+      console.error("apns", e);
+    }
   }
   return json({ ok: true });
 });
@@ -115,8 +237,8 @@ async function mirrorToLiveActivity(userId: string, live: Live) {
   if (updateTokens && updateTokens.length > 0) {
     for (const row of updateTokens) {
       const lastHigh = row.last_high_priority_at ? Date.parse(row.last_high_priority_at) / 1000 : 0;
-      // High priority at most every ~20 s; the rest go out as low priority so
-      // we stay inside Apple's Live Activity update budget.
+      // High priority at most every ~20 s; the rest go out as low priority to
+      // stay inside Apple's Live Activity update budget.
       const priority: 5 | 10 = now - lastHigh > 20 || !live.armed ? 10 : 5;
       const result = await sendLiveActivityPush(row.token, row.apns_env, {
         aps: { timestamp: now, event: "update", "content-state": contentState, "stale-date": now + 1800 },
@@ -124,8 +246,9 @@ async function mirrorToLiveActivity(userId: string, live: Live) {
       if (isDeadToken(result)) {
         await admin.from("live_activity_tokens").delete().eq("token", row.token);
       } else if (result.status === 200) {
-        const patch: Record<string, string> = { last_push_at: new Date().toISOString() };
-        if (priority === 10) patch.last_high_priority_at = patch.last_push_at;
+        const stamp = new Date().toISOString();
+        const patch: Record<string, string> = { last_push_at: stamp };
+        if (priority === 10) patch.last_high_priority_at = stamp;
         await admin.from("live_activity_tokens").update(patch).eq("token", row.token);
       } else {
         console.warn("apns update", result.status, result.reason);
@@ -134,8 +257,8 @@ async function mirrorToLiveActivity(userId: string, live: Live) {
     return;
   }
 
-  // No running activity: start one remotely (iOS 17.2+ push-to-start),
-  // at most once per 10 minutes, only when a scrolling session begins.
+  // No running activity: start one remotely (iOS 17.2+ push-to-start), at most
+  // once per 10 minutes, only when a scrolling session begins.
   if (!live.sessionStarted || !live.armed) return;
   const { data: startTokens } = await admin
     .from("live_activity_tokens")

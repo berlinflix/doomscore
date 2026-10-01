@@ -7,7 +7,7 @@
 * `com.gridcc.doomscore.widgets` and `com.gridcc.doomscore.broadcast`: App Groups.
 * App Group `group.com.gridcc.doomscore`, linked to all three.
 * APNs: the team-scoped "Gridcc FCM APNs Key" (`ZL4A5C2JP8`) also works for Doomscore.
-* Privacy policy URL: `https://doomscore.gridcc.tech/privacy`.
+* Privacy policy URL: `https://doomscore.gridcc.tech/privacy/`.
 
 ## Review notes (paste into App Store Connect)
 
