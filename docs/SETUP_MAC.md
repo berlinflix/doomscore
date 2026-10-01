@@ -99,19 +99,21 @@ git push --force https://github.com/berlinflix/doomscore-site.git site-deploy:ma
 - Check it: `https://doomscore.gridcc.tech/.well-known/apple-app-site-association` should show JSON,
   and `https://doomscore.gridcc.tech/privacy/` should show the policy.
 
-## 8. Backend (battles + live Dynamic Island), optional
+## 8. Backend (battles + live Dynamic Island) — already live
 
-The full guide is [backend/README.md](../backend/README.md). The values you'll need:
+Supabase project **doomscore** (`aybvdsufopdgyegdinpx`, Mumbai) is set up:
 
-| Setting | Value |
-|---|---|
-| Supabase → Auth → Apple → Client IDs | `com.gridcc.doomscore` |
-| `APNS_TEAM_ID` | `5862BR3S2S` |
-| `APNS_BUNDLE_ID` | `com.gridcc.doomscore` |
-| `APNS_KEY_ID` + `.p8` | Reuse **Gridcc FCM APNs Key** `ZL4A5C2JP8` if you still have its .p8 file (it's team-wide). If you don't, create a new APNs key under Keys. |
+- Database: tables, Row-Level Security, invites, leaderboard and anti-cheat functions.
+- Auth: Sign in with Apple (client `com.gridcc.doomscore`, users without email allowed) and anonymous sign-ins.
+- Edge Functions `ingest` and `activity`, with "Verify JWT" off because they check the app's device token themselves.
+- Secrets `APNS_TEAM_ID`, `APNS_BUNDLE_ID` and `APNS_KEY_ID` (`ZL4A5C2JP8`).
+- `Config/Base.xcconfig` already points at it.
 
-After it's set up, put `DS_SUPABASE_URL` and `DS_SUPABASE_ANON_KEY` in `Config/Secrets.xcconfig`
-and run `xcodegen generate`.
+**One thing left for live Dynamic Island updates:** add the secret `APNS_PRIVATE_KEY`.
+In Supabase → Edge Functions → Secrets, paste the full contents of the `.p8` file for key
+`ZL4A5C2JP8` (Gridcc FCM APNs Key). If you no longer have that file, create a new APNs key
+under developer.apple.com → Keys, then update `APNS_KEY_ID` to the new key's ID and paste its `.p8`.
+Without it, everything else still works; the Dynamic Island just refreshes less often.
 
 ## 9. Debugging and tests
 

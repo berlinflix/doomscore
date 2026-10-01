@@ -19,10 +19,10 @@ DS_APP_GROUP_ID = group.com.gridcc.doomscore
 DS_ASSOCIATED_DOMAIN = doomscore.gridcc.tech
 DS_INVITE_BASE_URL = https:/$()/doomscore.gridcc.tech/i
 
-// Your own Supabase project (backend/README.md). Leave the placeholders to run
-// the app in local-only mode (counting, widgets and recaps still work).
-DS_SUPABASE_URL = https:/$()/YOUR-PROJECT-REF.supabase.co
-DS_SUPABASE_ANON_KEY = YOUR_SUPABASE_ANON_KEY
+// Supabase project "doomscore" (Mumbai). The publishable key is public by design;
+// Row-Level Security on the server protects the data.
+DS_SUPABASE_URL = https:/$()/aybvdsufopdgyegdinpx.supabase.co
+DS_SUPABASE_ANON_KEY = sb_publishable_FdPK2eoowBgecHdMhYPorA_efrQxTO-
 
 // Optional: URL of a JSON detector config (see docs/DETECTOR_TUNING.md) so you
 // can ship keyword/threshold fixes when Instagram changes its UI.

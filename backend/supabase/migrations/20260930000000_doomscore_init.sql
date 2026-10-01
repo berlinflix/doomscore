@@ -145,8 +145,12 @@ create policy stats_select on public.daily_stats
 
 -- Least privilege: start from nothing, then grant exactly what the policies need.
 revoke all on all tables in schema public from anon, authenticated;
+grant usage on schema public to anon, authenticated, service_role;
 grant select, insert, update on public.profiles to authenticated;
 grant select on public.friendships, public.invites, public.daily_stats to authenticated;
+-- Edge Functions use the service role (bypasses RLS); make its access explicit
+-- so it doesn't depend on the project's "expose new tables" default.
+grant all on all tables in schema public to service_role;
 
 -- ─── Helpers ────────────────────────────────────────────────────────────────
 

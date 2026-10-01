@@ -2,6 +2,11 @@
 
 Everything here is new and yours — nothing talks to BrainPal's servers.
 
+**Live project:** `doomscore` · ref `aybvdsufopdgyegdinpx` · region Mumbai (ap-south-1) ·
+`https://aybvdsufopdgyegdinpx.supabase.co`. The migration, auth providers, both Edge Functions
+and the APNs secrets (except `APNS_PRIVATE_KEY`) are already applied. The steps below are for
+rebuilding it or setting up another environment.
+
 ## 1. Create the project
 
 1. Create a project at supabase.com (pick a region near your users, e.g. Mumbai).
