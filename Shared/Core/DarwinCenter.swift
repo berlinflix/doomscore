@@ -12,6 +12,7 @@ enum DarwinName {
     static var hintChanged: String { "\(prefix).hint-changed" }
     static var stopRequested: String { "\(prefix).stop-requested" }
     static var dataReset: String { "\(prefix).data-reset" }
+    static var screenTimeChanged: String { "\(prefix).screen-time-changed" }
 }
 
 final class DarwinCenter: @unchecked Sendable {

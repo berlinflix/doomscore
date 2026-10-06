@@ -13,6 +13,8 @@ Widgets/Info.plist
 Widgets/DoomscoreWidgets.entitlements
 Broadcast/Info.plist
 Broadcast/DoomscoreBroadcast.entitlements
+ActivityMonitor/Info.plist
+ActivityMonitor/DoomscoreActivityMonitor.entitlements
 
 # Secrets
 Config/Secrets.xcconfig

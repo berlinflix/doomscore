@@ -24,8 +24,8 @@ enum NotificationService {
         settings.lastNudgeAt = Date()
 
         let content = UNMutableNotificationContent()
-        content.title = "counter's off 👀"
-        content.body = "tap to start counting your \(app.feedName) — takes 2 sec"
+        content.title = "not tracking right now 👀"
+        content.body = "tap to count your \(app.feedName) exactly — takes 2 sec"
         content.sound = nil
         content.interruptionLevel = .timeSensitive
         content.relevanceScore = 1

@@ -85,27 +85,45 @@ struct PressableStyle: ButtonStyle {
 // MARK: - Pills & chips
 
 struct StatusPill: View {
-    let isArmed: Bool
+    let mode: AppModel.TrackingMode
     @State private var pulse = false
+
+    private var isOn: Bool { mode != .off }
+
+    private var tint: Color {
+        switch mode {
+        case .off: Theme.textFaint
+        case .auto: Theme.cyan
+        case .precise: Theme.lime
+        }
+    }
+
+    private var label: String {
+        switch mode {
+        case .off: "not tracking"
+        case .auto: "auto"
+        case .precise: "precise"
+        }
+    }
 
     var body: some View {
         HStack(spacing: 7) {
             Circle()
-                .fill(isArmed ? Theme.lime : Theme.textFaint)
+                .fill(tint)
                 .frame(width: 8, height: 8)
-                .scaleEffect(isArmed && pulse ? 1.5 : 1)
-                .opacity(isArmed && pulse ? 0.5 : 1)
-            Text(isArmed ? "counting" : "not counting")
+                .scaleEffect(isOn && pulse ? 1.5 : 1)
+                .opacity(isOn && pulse ? 0.5 : 1)
+            Text(label)
                 .font(Theme.body(13, weight: .heavy))
-                .foregroundStyle(isArmed ? Theme.lime : Theme.textDim)
+                .foregroundStyle(isOn ? tint : Theme.textDim)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
-        .background(Capsule().fill(isArmed ? Theme.lime.opacity(0.12) : Theme.surfaceHigh))
+        .background(Capsule().fill(isOn ? tint.opacity(0.12) : Theme.surfaceHigh))
         .onAppear {
             withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulse = true }
         }
-        .accessibilityLabel(isArmed ? "Counter is on" : "Counter is off")
+        .accessibilityLabel(isOn ? "Tracking: \(label)" : "Not tracking")
     }
 }
 

@@ -4,7 +4,8 @@
 
 | Threat | Control |
 |---|---|
-| Screen content leaking (DMs, banking…) | Frames never retained/written/uploaded; OCR text lives in memory only; no logging of text (`Log` only emits counters). Reel identities persisted only as salted, truncated SHA-256, reset daily. Optional strict mode. |
+| Usage data leaking (auto mode) | Screen Time access is the user's own individual authorization (Face ID), revocable in iOS Settings. Doomscore only gets minute thresholds for the apps the user picked, as opaque tokens — no bundle IDs, no other apps, no content. Minutes and estimates stay in the App Group; only daily totals sync, and only for battle users. |
+| Screen content leaking (DMs, banking…) — precise mode | Frames never retained/written/uploaded; OCR text lives in memory only; no logging of text (`Log` only emits counters). Reel identities persisted only as salted, truncated SHA-256, reset daily. Optional strict mode. |
 | Stolen user session | Supabase session in the **app-private** Keychain (`AfterFirstUnlockThisDeviceOnly`, not synced). Single-flight refresh avoids refresh-token reuse. |
 | Extension needing credentials | Separate **scoped device token** (256-bit random, shared Keychain group). Server stores only its SHA-256; it can only write the owner's counts and Live Activity tokens; max 5 active per user; revocable; deleted on sign-out/account deletion. |
 | Reading other users' data | Postgres **Row-Level Security** on every table: profiles/stats readable by self + friends only; friendships/invites only your own; device/push/rate tables have no client access. Table privileges revoked from `anon`, minimal grants to `authenticated`. |

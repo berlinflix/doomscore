@@ -18,6 +18,13 @@ struct IngestPayload: Encodable, Sendable {
         let armed: Bool
         let appName: String
         let sessionStarted: Bool
+        /// Counts include Screen Time estimates (auto mode).
+        var estimated = false
+        /// Unix seconds; drives the island's live session timer.
+        var sessionStart: Double?
+        var streak = 0
+        /// The visit is over: end the Live Activity.
+        var ended = false
     }
 
     let day: String

@@ -1,54 +1,67 @@
 # Doomscore on iOS — how it works
 
-iOS has no Accessibility-style API, no background services and no overlays, so each
-Android piece is replaced by the closest thing Apple allows:
+iOS has no Accessibility-style API, no background services and no overlays. No app can read
+another app's screen without a user-started screen broadcast. So each Android piece is
+replaced by the closest thing Apple allows:
 
 | Android (BrainPal) | iOS (Doomscore) |
 |---|---|
-| Accessibility Service reads IG view IDs | **Broadcast Upload Extension** (ReplayKit) sees the screen → on-device motion + text detection |
-| Service notices IG opening | **Shortcuts personal automation** "When Instagram is opened → Run Immediately" runs our App Intent in the background |
-| Floating bubble overlay | **Live Activity** in the Dynamic Island + Lock Screen, updated by push |
+| Accessibility Service reads IG view IDs, always on | **Auto mode: Screen Time API.** A DeviceActivity monitor extension is woken at every minute of Instagram/TikTok use → minutes × pace = estimated reels. Always on, no screen access |
+| (same, exact per-reel) | **Precise mode (optional): Broadcast Upload Extension** (ReplayKit) sees the screen → on-device motion + text detection |
+| UsageStats fallback counter | Auto mode is the iOS equivalent (Screen Time ≈ UsageStats) |
+| Service notices IG opening | Screen Time's first minute mark, or the optional **Shortcuts automation** "When Instagram is opened" for an instant island |
+| Floating bubble overlay | **Live Activity** in the Dynamic Island + Lock Screen, started/updated/ended by push |
 | Glance widgets | **WidgetKit** home + lock screen widgets, Control Center button |
 | Room DB + WorkManager sync | App Group JSON store + your own Supabase backend |
 
-## 1. Auto-start without opening the app
+## 1. Auto mode (Screen Time, the default)
 
 ```mermaid
 sequenceDiagram
     participant U as User
-    participant IG as Instagram
-    participant SC as Shortcuts automation
-    participant I as ReelsAppOpenedIntent (background)
-    participant A as Doomscore app
-    participant X as Broadcast extension
-    U->>IG: opens Instagram
-    IG-->>SC: "App is Opened" trigger
-    SC->>I: run (Run Immediately, no banner)
-    I->>I: write foreground hint, start/refresh Live Activity
-    alt counter already armed
-        I-->>SC: done — invisible
-    else not armed
-        I->>A: iOS 26+: continueInForeground → arm screen (auto)
-        A->>U: system "Start Broadcast" sheet (1 tap)
-        U->>X: broadcast starts
-        X-->>A: Darwin ping "broadcast-started"
-        A->>IG: opens instagram:// — back to scrolling
-        Note over I,A: iOS 18–25: time-sensitive "tap to count" notification instead
-    end
+    participant ST as Screen Time (iOS)
+    participant M as Monitor extension
+    participant S as App Group store
+    participant B as ingest Edge Function
+    participant LA as Dynamic Island
+    U->>ST: one-time Face ID + picks Instagram (FamilyActivityPicker)
+    Note over ST: app registers thresholds 1…960 min (DeviceActivityCenter)
+    U->>ST: scrolls Instagram
+    ST->>M: eventDidReachThreshold("ig.N") every minute of use
+    M->>S: ScreenTimeEstimator.apply → minutes, ≈reels (minutes × pace)
+    M->>B: totals + live state (blocking ≤3.5 s, extension exits after)
+    B->>LA: push-to-start (new visit) / update
+    M->>M: re-arm watchdog (fires ~3 min after the last minute mark)
+    Note over M,LA: watchdog → "ended" → backend sends ActivityKit end
 ```
 
-* **Setup is once**, ~30 s, guided in onboarding (`AutomationGuideView`). The first run
-  auto-verifies (`automationVerifiedAt`).
-* **What iOS will never allow:** starting the screen broadcast without one user tap.
-  That's the floor: *zero* taps while armed, *one* tap per arm. The broadcast keeps
-  running across apps until the user stops it or iOS ends it (usually on lock), so most
-  sessions after the first need no taps at all.
-* Other zero-open entry points: the Control Center control ("Count Reels"), and
-  Control Center → long-press Screen Recording → Doomscore → Start Broadcast.
-* Optional second automation "Is Closed → Reels App Closed" ends the Live Activity and
-  tells the detector the app left (better accuracy + battery).
+* **Authorization:** `AuthorizationCenter.requestAuthorization(for: .individual)` (Face ID,
+  once). App picks are opaque `ApplicationToken`s — Doomscore never learns bundle IDs or
+  anything about content.
+* **Thresholds:** one `DeviceActivityEvent` per minute for the first hour, then every 2, 5
+  and 10 minutes up to 16 h (228 per app), on a daily 00:00–23:59 schedule, with
+  `includesPastActivity: false`. Names are `ig.37` / `tt.12` (`ScreenTimeLadder`).
+* **Estimator (`ScreenTimeEstimator`, unit-tested):** pure logic shared by app and extension.
+  * Thresholds count from the moment monitoring was (re)registered on that day, from
+    midnight on later days (`ScreenTimeRegistration` keeps the baseline).
+  * iOS delivers thresholds late, twice, and sometimes all at once before they're possible.
+    Duplicates are ignored; a threshold above the elapsed minutes is rejected as premature;
+    growth is clamped to the wall clock. A burst of premature ones sets `needsRearmSince`,
+    and the app re-registers on its next launch or background refresh.
+  * Estimated reels accumulate at the pace in effect at the time, so recalibration never
+    lowers today's number. Minutes that happen while precise mode is running are "covered"
+    (counted exactly, not estimated).
+  * Visits: a new session after 4 quiet minutes; the Shortcuts "opened" time is used as the
+    start when available.
+* **Pace:** onboarding quiz (5.0 / 3.5 / 1.5 reels per IG minute; TikTok 5.0). Each finished
+  day with ≥ 8 covered minutes calibrates it: exact reels ÷ covered minutes, blended 60/40.
+* **Watchdog:** each minute mark re-arms a one-off 15-minute schedule starting 3 minutes
+  later. iOS calls `intervalDidStart` once the phone is in use, which ends the visit.
+* **Limits:** Screen Time reports app minutes only — not reels, ads or rewatches — so auto
+  mode is an estimate (marked ≈ everywhere). Distribution needs Apple's Family Controls
+  entitlement (see APP_REVIEW.md).
 
-## 2. The detector (Broadcast Upload Extension)
+## 2. Precise mode (Broadcast Upload Extension, optional)
 
 ```mermaid
 flowchart LR
@@ -75,19 +88,23 @@ are rejected (or later dropped by the classifier).
 
 **Reading the overlay (Vision OCR, on-device).** After a swipe settles (300 ms) and at
 ~1 Hz while in a feed, a half-resolution grayscale copy goes through
-`VNRecognizeTextRequest(.fast)`. The classifier scores the layout:
+`VNRecognizeTextRequest(.fast)`. Only the app's own overlay text is trusted: it's small
+(`maxOverlayTextHeight`) and left-aligned (`overlayMaxMinX`). Subtitles and meme text
+burned into videos are big or centred and change every second, so they're ignored. The
+classifier scores the layout:
 
 * vertical **action rail** of counters/labels on the right (`12.4K`, `Dislike`, `Share`),
-* **caption block** bottom-left, `Follow`/`Subscribe`,
+* **caption block** bottom-left, `Follow`/`Subscribe`, the audio line (`♫ … Original audio`),
 * feed headers (`Reels`, `For You`, `Spotlight`), automation hint (+1),
 * negatives: `Your story`, `Liked by`, `Suggested for you`… (home feed).
 
 It also extracts:
 
-* **Ad**: `Sponsored` (+ 18 localisations) or CTA buttons (`Shop now`, `Install`,
-  `Learn more`…) → *skipped, like Android's "Sponsored Reel by"*.
-* **Identity**: creator handle (text left of Follow/Subscribe), first caption words, top
-  like counter → used for rewatch detection (fuzzy match, tolerant to a +1 like).
+* **Ad**: `Sponsored` (+ 18 localisations) or left-aligned CTA buttons (`Shop now`,
+  `Install`, `Learn more`…) → *skipped, like Android's "Sponsored Reel by"*.
+* **Identity**: creator handle (text left of Follow/Subscribe, else the first username-like
+  overlay line), first caption words, top like counter → rewatch detection (fuzzy match,
+  tolerant to a +1 like).
 
 **Counting rules (`ReelCounterEngine`, unit-tested):**
 
@@ -99,10 +116,11 @@ It also extracts:
 | swipe forward onto a reel seen today | 🔁 rewatch |
 | looping / auto-replay (no page change) | nothing |
 | same reel after app switch / comments closed | nothing ("resume") |
-| identity changed without a detected swipe (auto-scroll, dropped frames) | ✅ counted (implicit) |
+| picture cut + 2 readings agree on a new reel, no swipe seen (dropped frames) | ✅ counted (implicit) |
+| overlay text changes but the picture didn't cut (OCR misread) | nothing |
 | swipe while comment sheet open | nothing |
 | OCR unavailable | position model: count only beyond the furthest reel reached |
-| "swipe" but same overlay after (camera pan) | nothing |
+| "swipe" but same overlay after (camera pan, scrolling inside the video) | nothing |
 
 **Budgets.** Broadcast extensions are capped at **50 MB**. The pipeline never retains
 ReplayKit frames, reuses one gray buffer, runs one OCR at a time, and skips OCR when
@@ -119,25 +137,35 @@ by the extension — fix detection when Instagram changes its UI without an App 
 
 ## 3. Live Activity ("the bubble")
 
-* Started locally by `ReelsAppOpenedIntent` (a `LiveActivityIntent` may start activities
-  from the background) or when arming.
-* **App extensions can't update Live Activities**, so the broadcast extension reports to
-  your backend and the `ingest` function pushes ActivityKit updates (priority 10 at most
-  every ~20 s, otherwise priority 5 to respect Apple's budget;
-  `NSSupportsLiveActivitiesFrequentUpdates` is on).
-* Push-to-start tokens let the backend start the activity when a session begins even if
-  the app never ran (armed from Control Center).
-* Without a backend it still shows, refreshed whenever the app or intents run.
+* **Compact:** a cap ring with the mood emoji, and the live count (`~` when estimated).
+  **Expanded:** Goob, a big gradient count, the cap meter, and three chips: a session timer
+  (`Text(timerInterval:)` — iOS ticks it every second with no updates), reels this session,
+  and the chill streak. **Lock Screen:** the same, plus an AUTO / LIVE / PAUSED pill.
+* **Started** remotely by push-to-start when the Screen Time monitor sees a new visit, or
+  locally by `ReelsAppOpenedIntent` (a `LiveActivityIntent` may start activities from the
+  background) or when precise mode starts.
+* **Updated** by push: app extensions can't update Live Activities, so the extensions report
+  to the backend and `ingest` pushes ActivityKit updates (priority 10 at most every ~20 s,
+  otherwise 5; `NSSupportsLiveActivitiesFrequentUpdates` is on). Auto-mode updates carry a
+  4-minute stale date, so a quiet island shows "paused".
+* **Ended** by the backend when the monitor's watchdog reports the visit is over (`ended`),
+  by the "Reels App Closed" automation, or replaced when a new visit starts.
+* `ContentState` decodes new fields with defaults, so the app and backend can update independently.
+* Remote updates need a device token, which is issued when the user joins battles. Without
+  it, the island still shows and refreshes whenever the app or intents run.
 
 ## 4. Data & sync
 
-* App Group container: `live.json` (extension → everyone, heartbeat every 5 s so a
-  crashed extension is detectable), `ledger.json` (per-day records: total, per-app,
-  hourly, watch time, ads, rewatches, sessions), `foreground-hint.json`,
-  `leaderboard-cache.json`, `seen-reels.json`, `diagnostics.json`.
-  All reads/writes use `NSFileCoordinator` + atomic writes.
-* Cross-process pings: Darwin notifications (`live-changed`, `broadcast-started`, …).
-* Backend receives **absolute daily totals** (idempotent) via a scoped device token.
+* App Group container: `screen-time.json` (auto mode: per-day minutes, estimates, visits,
+  registrations), `screen-time-selections.json` (opaque app tokens), `live.json` (precise
+  mode → everyone, heartbeat every 5 s so a crashed extension is detectable),
+  `ledger.json` (exact per-day records), `foreground-hint.json`, `leaderboard-cache.json`,
+  `seen-reels.json`, `diagnostics.json`. All reads/writes use `NSFileCoordinator` + atomic writes.
+* What users see is `SharedStore.mergedLedger()`: exact records plus that day's Screen Time
+  estimate (`DayRecord.estimatedReels`, `screenMinutes`).
+* Cross-process pings: Darwin notifications (`screen-time-changed`, `live-changed`, …).
+* Backend receives **absolute daily totals** (idempotent, the server keeps the highest) via
+  a scoped device token. Every sender uploads the same merged numbers.
 
 ## 5. Extras
 
@@ -151,9 +179,11 @@ by the extension — fix detection when Instagram changes its UI without an App 
 
 ## 6. Known limits (be upfront with users)
 
-* One tap to arm; iOS usually ends the broadcast when the phone locks (red pill visible while on).
-* OCR-based detection needs on-device tuning per app version — use Settings → Detector lab.
-* `ReelsAppOpenedIntent` auto-opening needs iOS 26 (`DS_INTENT_MODES`); iOS 18–25 get a
-  notification nudge instead.
-* Screen Time API (FamilyControls) could add zero-tap *estimates* and blocking, but needs
-  Apple's distribution entitlement — left as a phase-2 option.
+* Auto mode estimates reels from minutes; only precise mode is exact.
+* Screen Time callbacks are known to be late, doubled or premature on some iOS versions;
+  the estimator guards against all three, but monitoring can still occasionally stop until
+  the app is opened.
+* Precise mode needs one tap per session and shows the red pill; iOS usually ends the
+  broadcast when the phone locks. Detection needs on-device tuning per app version.
+* `ReelsAppOpenedIntent` auto-opening precise mode needs iOS 26 (`DS_INTENT_MODES`) and the
+  opt-in setting; iOS 18–25 get a notification nudge instead.

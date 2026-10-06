@@ -40,9 +40,13 @@ actor SyncService {
         lastPush = Date()
         let ledger = SharedStore.shared.mergedLedger()
         let today = DayKey.today()
+        var sent = 0
         for offset in 0..<3 {
             let key = today.adding(days: -offset)
             guard let record = ledger[key], record.total > 0 || record.watchSeconds > 0 else { continue }
+            // The server accepts one upload per device every 1.5 s.
+            if sent > 0 { try? await Task.sleep(for: .milliseconds(1700)) }
+            sent += 1
             do {
                 try await client.send(IngestPayload.make(for: record, live: nil))
             } catch {

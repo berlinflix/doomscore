@@ -10,8 +10,9 @@ struct HomeView: View {
             VStack(spacing: 16) {
                 header
                 hero
-                if !model.isArmed { armCard }
-                if !model.automationVerified { autoStartCard }
+                if model.trackingMode == .off { ScreenTimeConnectCard(showsTikTok: false) }
+                if model.trackingMode == .auto && !model.automationVerified { autoStartCard }
+                if model.trackingMode != .precise { preciseCard }
                 appChips
                 statsGrid
                 hourlyCard
@@ -24,7 +25,7 @@ struct HomeView: View {
         .scrollIndicators(.hidden)
         .screenBackground()
         .sensoryFeedback(.increase, trigger: model.today.total)
-        .animation(.spring(response: 0.45, dampingFraction: 0.8), value: model.isArmed)
+        .animation(.spring(response: 0.45, dampingFraction: 0.8), value: model.trackingMode)
     }
 
     // MARK: Sections
@@ -35,7 +36,7 @@ struct HomeView: View {
                 .font(Theme.display(28))
                 .foregroundStyle(Theme.brand)
             Spacer()
-            StatusPill(isArmed: model.isArmed)
+            StatusPill(mode: model.trackingMode)
             Button {
                 router.sheet = .settings
             } label: {
@@ -56,19 +57,30 @@ struct HomeView: View {
                 .padding(.top, 6)
             GoobView(mood: model.mood, size: 190)
                 .padding(.vertical, 4)
-            Text("\(today.total)")
-                .font(Theme.display(84))
-                .foregroundStyle(Theme.text)
-                .contentTransition(.numericText(value: Double(today.total)))
-                .animation(.spring(response: 0.35, dampingFraction: 0.7), value: today.total)
-                .accessibilityLabel("\(today.total) reels today")
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                if today.isEstimated {
+                    Text("≈")
+                        .font(Theme.display(44))
+                        .foregroundStyle(Theme.textFaint)
+                }
+                Text("\(today.total)")
+                    .font(Theme.display(84))
+                    .foregroundStyle(Theme.text)
+                    .contentTransition(.numericText(value: Double(today.total)))
+                    .animation(.spring(response: 0.35, dampingFraction: 0.7), value: today.total)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(today.isEstimated ? "about " : "")\(today.total) reels today")
             Text("reels today · \(model.mood.title) \(model.mood.emoji)")
                 .font(Theme.body(16, weight: .bold))
                 .foregroundStyle(Theme.textDim)
+            if today.isEstimated || today.screenMinutes > 0 {
+                estimateNote(today)
+            }
             VStack(spacing: 8) {
                 CapBar(count: today.total, goal: model.goal)
                 HStack {
-                    Text(model.isArmed && model.sessionCount > 0 ? "this session: \(model.sessionCount)" : "daily cap")
+                    Text(model.sessionCount > 0 ? "this session: \(model.sessionCount)" : "daily cap")
                     Spacer()
                     Text("\(today.total) / \(model.goal)")
                 }
@@ -80,31 +92,43 @@ struct HomeView: View {
         .padding(.vertical, 12)
     }
 
-    private var armCard: some View {
+    /// Makes clear what's measured (minutes) and what's estimated (reels).
+    private func estimateNote(_ today: DayRecord) -> some View {
+        let pace = model.pace(for: .instagram)
+        return HStack(spacing: 6) {
+            Image(systemName: "hourglass")
+            Text("\(today.screenMinutes) min of scrolling × \(String(format: "%.1f", pace))/min \(model.isPaceCalibrated ? "(your pace)" : "(est.)")")
+        }
+        .font(Theme.body(12, weight: .bold))
+        .foregroundStyle(Theme.cyan)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Capsule().fill(Theme.cyan.opacity(0.1)))
+    }
+
+    private var preciseCard: some View {
         Button {
             router.sheet = .arm(auto: false, returnTo: nil)
         } label: {
-            HStack(spacing: 14) {
-                Image(systemName: "record.circle")
-                    .font(.system(size: 26, weight: .bold))
-                    .foregroundStyle(.black)
-                    .symbolEffect(.pulse, options: .repeating)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("arm the counter")
-                        .font(Theme.body(17, weight: .black))
-                    Text("one tap, then go scroll. we'll handle the rest.")
-                        .font(Theme.body(13, weight: .semibold))
-                        .opacity(0.75)
+            Card {
+                HStack(spacing: 14) {
+                    Text("🎯").font(.system(size: 28))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("precise mode")
+                            .font(Theme.body(16, weight: .heavy))
+                            .foregroundStyle(Theme.text)
+                        Text(model.trackingMode == .off
+                             ? "count every single reel with a screen broadcast — no Screen Time needed"
+                             : "optional: exact count for a session, skips ads + rewatches, learns your pace")
+                            .font(Theme.body(13, weight: .semibold))
+                            .foregroundStyle(Theme.textDim)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundStyle(Theme.textFaint)
                 }
-                .foregroundStyle(.black)
-                Spacer()
-                Image(systemName: "chevron.right").font(.system(size: 15, weight: .black)).foregroundStyle(.black)
             }
-            .padding(18)
-            .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Theme.brand))
         }
         .buttonStyle(PressableStyle())
-        .transition(.scale.combined(with: .opacity))
     }
 
     private var autoStartCard: some View {
@@ -115,10 +139,10 @@ struct HomeView: View {
                 HStack(spacing: 14) {
                     Text("⚡️").font(.system(size: 30))
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("auto-start when you open reels")
+                        Text("instant Dynamic Island")
                             .font(Theme.body(16, weight: .heavy))
                             .foregroundStyle(Theme.text)
-                        Text("30-sec Shortcuts setup so you never forget to count")
+                        Text("30-sec Shortcuts setup: your count pops up the second you open Instagram")
                             .font(Theme.body(13, weight: .semibold))
                             .foregroundStyle(Theme.textDim)
                     }
@@ -155,9 +179,19 @@ struct HomeView: View {
                 label: model.streak.todayAlive ? "chill streak (best \(model.streak.best)d)" : "streak broke today. tomorrow's a new era",
                 tint: Theme.cyan
             )
-            StatTile(emoji: "⏱️", value: Fmt.duration(today.watchSeconds), label: "time in reels", tint: Theme.text)
-            StatTile(emoji: "🥷", value: "\(today.adsSkipped)", label: "ads dodged (not counted)", tint: Theme.lime)
-            StatTile(emoji: "🔁", value: "\(today.rewatchesSkipped)", label: "rewatches (not counted)", tint: Theme.pink)
+            StatTile(emoji: "⏱️", value: Fmt.duration(today.watchSeconds), label: "time scrolling", tint: Theme.text)
+            if today.adsSkipped > 0 || today.rewatchesSkipped > 0 || model.trackingMode == .precise {
+                StatTile(emoji: "🥷", value: "\(today.adsSkipped)", label: "ads dodged (not counted)", tint: Theme.lime)
+                StatTile(emoji: "🔁", value: "\(today.rewatchesSkipped)", label: "rewatches (not counted)", tint: Theme.pink)
+            } else {
+                StatTile(emoji: "🔂", value: "\(today.sessions)", label: "times you opened the scroll hole", tint: Theme.lime)
+                StatTile(
+                    emoji: "🎚️",
+                    value: String(format: "%.1f/min", model.pace(for: .instagram)),
+                    label: model.isPaceCalibrated ? "your pace (from precise mode)" : "starting pace — precise mode tunes it",
+                    tint: Theme.pink
+                )
+            }
         }
     }
 

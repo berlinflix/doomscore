@@ -32,6 +32,8 @@ final class StatsRecorder {
     private var lastDarwinPost = Date.distantPast
     private var lastWidgetReload = Date.distantPast
     private var lastIngest = Date.distantPast
+    private var cachedStreak = 0
+    private var streakComputedAt = Date.distantPast
 
     /// Called on the analysis queue when the calendar day changes.
     var onDayChanged: (() -> Void)?
@@ -42,7 +44,8 @@ final class StatsRecorder {
         self.settings = settings
         self.ingest = ingest
         self.sessionGap = sessionGap
-        let todayRecord = store.todayRecord()
+        // Exact counts only — Screen Time estimates are merged in at read time.
+        let todayRecord = store.exactTodayRecord()
         var liveState = store.live ?? LiveState(today: todayRecord)
         liveState.today = todayRecord
         self.today = todayRecord
@@ -77,7 +80,7 @@ final class StatsRecorder {
         DarwinCenter.shared.post(DarwinName.broadcastFinished)
         WidgetCenter.shared.reloadAllTimelines()
         if ingest.isReady {
-            ingest.sendBlocking(IngestPayload.make(for: today, live: liveInfo(armed: false)))
+            ingest.sendBlocking(IngestPayload.make(for: store.effective(today), live: liveInfo(armed: false)))
         }
     }
 
@@ -201,7 +204,7 @@ final class StatsRecorder {
         writeLedger(now) // persist the finished day first
         if ingest.isReady {
             let client = ingest
-            let payload = IngestPayload.make(for: finished, live: nil)
+            let payload = IngestPayload.make(for: store.effective(finished), live: nil)
             Task.detached { try? await client.send(payload) }
         }
         today = DayRecord(day: key)
@@ -249,15 +252,30 @@ final class StatsRecorder {
         WidgetCenter.shared.reloadAllTimelines()
     }
 
-    private func liveInfo(armed: Bool) -> IngestPayload.Live {
-        IngestPayload.Live(
-            todayCount: today.total,
+    private func liveInfo(armed: Bool, effective: DayRecord? = nil) -> IngestPayload.Live {
+        let shown = effective ?? store.effective(today)
+        return IngestPayload.Live(
+            todayCount: shown.total,
             sessionCount: session?.reels ?? 0,
             goal: goal,
             armed: armed,
             appName: (live.currentApp ?? today.topApp ?? .instagram).displayName,
-            sessionStarted: sessionStartedPending
+            sessionStarted: sessionStartedPending,
+            estimated: false,
+            sessionStart: (live.sessionStartedAt ?? live.startedAt)?.timeIntervalSince1970,
+            streak: currentStreak()
         )
+    }
+
+    /// The chill streak for the island; history only changes slowly, so it's
+    /// recomputed at most every two minutes.
+    private func currentStreak() -> Int {
+        let now = Date()
+        if now.timeIntervalSince(streakComputedAt) > 120 {
+            cachedStreak = StatsEngine.streak(ledger: store.mergedLedger(), goal: goal, installDate: settings.installDate, now: now).current
+            streakComputedAt = now
+        }
+        return cachedStreak
     }
 
     private func sendIngestIfNeeded(_ now: Date) {
@@ -265,7 +283,10 @@ final class StatsRecorder {
         ingestDirty = false
         ingestInFlight = true
         lastIngest = now
-        let payload = IngestPayload.make(for: today, live: liveInfo(armed: true))
+        // Totals include today's Screen Time estimate so every sender agrees
+        // (the server keeps the highest value it has seen).
+        let shown = store.effective(today)
+        let payload = IngestPayload.make(for: shown, live: liveInfo(armed: true, effective: shown))
         sessionStartedPending = false
         let client = ingest
         let queue = self.queue

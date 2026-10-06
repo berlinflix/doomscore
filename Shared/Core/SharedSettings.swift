@@ -14,6 +14,42 @@ final class SharedSettings: @unchecked Sendable {
         case dailyGoal, trackedApps, onboardingComplete, automationVerifiedAt, installDate
         case nudgesEnabled, lastNudgeAt, strictPrivacyMode, diagnosticsEnabled, pendingRoute
         case identitySalt, deviceRegisteredAt, closeAutomationSeenAt
+        case screenTimeEnabled, scrollStyle, calibratedPaces, preciseAutoPrompt, screenTimeWidgetReloadAt
+    }
+
+    // MARK: Auto mode (Screen Time)
+
+    /// The user turned on Screen Time tracking (auto mode).
+    var screenTimeEnabled: Bool {
+        get { defaults.bool(forKey: Key.screenTimeEnabled.rawValue) }
+        set { defaults.set(newValue, forKey: Key.screenTimeEnabled.rawValue) }
+    }
+
+    var scrollStyle: ScrollStyle {
+        get { defaults.string(forKey: Key.scrollStyle.rawValue).flatMap(ScrollStyle.init(rawValue:)) ?? .mixed }
+        set { defaults.set(newValue.rawValue, forKey: Key.scrollStyle.rawValue) }
+    }
+
+    /// Reels per minute measured by precise mode, keyed by `SourceApp`.
+    var calibratedPaces: [String: Double] {
+        get { defaults.dictionary(forKey: Key.calibratedPaces.rawValue) as? [String: Double] ?? [:] }
+        set { defaults.set(newValue, forKey: Key.calibratedPaces.rawValue) }
+    }
+
+    /// Reels per minute used to turn Screen Time minutes into reels.
+    func pace(for slot: ScreenTimeSlot) -> Double {
+        calibratedPaces[slot.app.rawValue] ?? slot.defaultPace(style: scrollStyle)
+    }
+
+    /// Opt-in: when a reels app opens, also offer precise mode (screen broadcast).
+    var preciseAutoPrompt: Bool {
+        get { defaults.bool(forKey: Key.preciseAutoPrompt.rawValue) }
+        set { defaults.set(newValue, forKey: Key.preciseAutoPrompt.rawValue) }
+    }
+
+    var screenTimeWidgetReloadAt: Date? {
+        get { defaults.object(forKey: Key.screenTimeWidgetReloadAt.rawValue) as? Date }
+        set { defaults.set(newValue, forKey: Key.screenTimeWidgetReloadAt.rawValue) }
     }
 
     /// Daily cap ("goal") — the number where the mood meter maxes out.

@@ -66,6 +66,14 @@ final class ReelCounterEngine {
     private var lastOCRAt: TimeInterval = -.infinity
     private var forcedOCRAt: TimeInterval?
 
+    /// Last full-screen cut that wasn't a swipe (new video content).
+    private var lastCutAt: TimeInterval = -.infinity
+    /// When the current reel's identity was last set or re-confirmed.
+    private var identityConfirmedAt: TimeInterval = -.infinity
+    /// A reel that looks new but hasn't been confirmed by enough readings.
+    private var implicitCandidate: ReelIdentity?
+    private var implicitVotes = 0
+
     /// App reported by the Shortcuts automation, if any.
     var hint: SourceApp?
     /// Only analyse while an automation says a reels app is open.
@@ -130,6 +138,7 @@ final class ReelCounterEngine {
         // swipe) — ask OCR to check whether the reel changed.
         if isShortVideo, sample.diff >= config.motion.cutThreshold, !tracker.isTranslation(sample), !tracker.isTracking {
             forcedOCRAt = time + config.ocr.settleDelay
+            lastCutAt = time
         }
 
         guard let event = tracker.push(sample, gridHeight: grid.height, at: time) else { return [] }
@@ -202,6 +211,7 @@ final class ReelCounterEngine {
         if adoptNextIdentity, let identity = reading.identity {
             adoptNextIdentity = false
             currentIdentity = identity
+            confirmIdentity(at: reading.at)
             seen.insert(identity)
             persist(identity)
             return note([], "adopted identity")
@@ -219,6 +229,7 @@ final class ReelCounterEngine {
             // Opened the feed / came back to the app. Resumed reels don't count.
             if let current = currentIdentity, identity.compare(current) != .different {
                 currentIdentity = identity
+                confirmIdentity(at: reading.at)
                 return note([], "resume same reel")
             }
             return register(identity, isAd: reading.isAd, app: app, reason: .entry, at: reading.at)
@@ -229,13 +240,28 @@ final class ReelCounterEngine {
            reading.at - lastPageChangeAt > config.implicitChangeCooldown,
            pending == nil,
            !tracker.isTracking {
-            // Reel changed without a detected swipe (missed frames, auto-scroll).
+            // Reel changed without a detected swipe (missed frames, auto-scroll)?
+            // Only if the picture really changed — OCR misreads on a still
+            // scene must never count — and several readings agree.
+            guard lastCutAt > identityConfirmedAt else {
+                return note([], "overlay changed, picture didn't")
+            }
+            if let candidate = implicitCandidate, candidate.compare(identity) == .same {
+                implicitVotes += 1
+            } else {
+                implicitCandidate = identity
+                implicitVotes = 1
+            }
+            guard implicitVotes >= max(config.implicitConfirmations, 1) else {
+                return note([], "new reel? confirming")
+            }
             return register(identity, isAd: reading.isAd, app: app, reason: .implicit, at: reading.at)
         }
 
         if let current = currentIdentity, identity.compare(current) == .same {
             // Same reel, maybe with more overlay text readable now.
             currentIdentity = merge(current, identity)
+            confirmIdentity(at: reading.at)
         }
         return []
     }
@@ -316,6 +342,7 @@ final class ReelCounterEngine {
             cursor -= page.pages
             if let identity = reading.identity {
                 currentIdentity = identity
+                confirmIdentity(at: time)
                 seen.insert(identity)
             } else {
                 currentIdentity = nil
@@ -341,6 +368,7 @@ final class ReelCounterEngine {
             // Same overlay after the "swipe" → it was a camera pan or a partial
             // drag, not a new reel.
             if match == .same || (page.direction == .unknown && match == .unknown) {
+                confirmIdentity(at: time)
                 return note(out, "no page change")
             }
         }
@@ -352,6 +380,7 @@ final class ReelCounterEngine {
     private func register(_ identity: ReelIdentity, isAd: Bool, app: SourceApp, reason: CountDecision.Reason, at time: TimeInterval) -> [CountDecision] {
         lastPageChangeAt = time
         adoptNextIdentity = false
+        confirmIdentity(at: time)
         defer { currentIdentity = identity }
 
         if isAd {
@@ -385,6 +414,14 @@ final class ReelCounterEngine {
         currentIdentity = nil
         adoptNextIdentity = true
         return out
+    }
+
+    /// The current identity is trustworthy as of `time`; any pending
+    /// "new reel?" suspicion is dropped.
+    private func confirmIdentity(at time: TimeInterval) {
+        identityConfirmedAt = time
+        implicitCandidate = nil
+        implicitVotes = 0
     }
 
     private func merge(_ a: ReelIdentity, _ b: ReelIdentity) -> ReelIdentity {

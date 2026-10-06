@@ -81,6 +81,7 @@ targets:
         aps-environment: development
         com.apple.developer.usernotifications.time-sensitive: true
         com.apple.developer.associated-domains: [applinks:$(DS_ASSOCIATED_DOMAIN)]
+        com.apple.developer.family-controls: true
     settings:
       base:
         PRODUCT_NAME: Doomscore
@@ -91,6 +92,7 @@ targets:
     dependencies:
       - target: DoomscoreWidgets
       - target: DoomscoreBroadcast
+      - target: DoomscoreActivityMonitor
 
   # ─────────────── Widgets + Live Activity + Control Center ───────────────
   DoomscoreWidgets:
@@ -120,7 +122,36 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: $(DS_APP_BUNDLE_ID).widgets
         SKIP_INSTALL: YES
 
-  # ───────────── Broadcast Upload Extension (the reel detector) ─────────────
+  # ──────── Screen Time monitor (auto mode: minutes of use, no screen) ────────
+  DoomscoreActivityMonitor:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ActivityMonitor
+      - path: Shared/Core
+    info:
+      path: ActivityMonitor/Info.plist
+      properties:
+        CFBundleDisplayName: Doomscore Screen Time
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.deviceactivity.monitor-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ActivityMonitorExtension
+        DSAppGroupID: $(DS_APP_GROUP_ID)
+        DSSupabaseURL: $(DS_SUPABASE_URL)
+        DSSupabaseAnonKey: $(DS_SUPABASE_ANON_KEY)
+    entitlements:
+      path: ActivityMonitor/DoomscoreActivityMonitor.entitlements
+      properties:
+        com.apple.security.application-groups: [$(DS_APP_GROUP_ID)]
+        com.apple.developer.family-controls: true
+    settings:
+      base:
+        PRODUCT_NAME: DoomscoreActivityMonitor
+        PRODUCT_BUNDLE_IDENTIFIER: $(DS_APP_BUNDLE_ID).activitymonitor
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+
+  # ───────────── Broadcast Upload Extension (precise mode) ─────────────
   DoomscoreBroadcast:
     type: app-extension
     platform: iOS
@@ -182,6 +213,15 @@ schemes:
     build:
       targets:
         DoomscoreBroadcast: all
+        Doomscore: all
+    run:
+      config: Debug
+      askForAppToLaunch: true
+      debugEnabled: true
+  DoomscoreActivityMonitor:
+    build:
+      targets:
+        DoomscoreActivityMonitor: all
         Doomscore: all
     run:
       config: Debug

@@ -15,17 +15,18 @@ enum ReelsAppOption: String, AppEnum {
     var sourceApp: SourceApp { SourceApp(rawValue: rawValue) ?? .other }
 }
 
-/// Run by the Shortcuts automation "When Instagram is opened → Run Immediately".
-/// Runs in the background (no app launch), so it's invisible when all is well:
-///  1. records which reels app is in front (helps the detector + battery),
-///  2. starts/refreshes the Dynamic Island counter (LiveActivityIntent may
-///     start Live Activities from the background),
-///  3. if the counter isn't armed: on iOS 26+ it brings Doomscore forward on
-///     the one-tap arm screen (then bounces back); on older iOS it sends a
-///     time-sensitive "tap to count" nudge.
+/// Run by the optional Shortcuts automation "When Instagram is opened → Run
+/// Immediately". Runs in the background (no app launch):
+///  1. records which reels app is in front (session timer + precise mode),
+///  2. pops the Dynamic Island counter up instantly (a LiveActivityIntent may
+///     start Live Activities from the background) — without the automation
+///     it appears after the first minute, via push,
+///  3. only when nothing is tracking (or the user opted into precise-mode
+///     prompts): on iOS 26+ it brings Doomscore forward on the one-tap arm
+///     screen; on older iOS it sends a "tap to count" nudge.
 struct ReelsAppOpenedIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Reels App Opened"
-    static var description = IntentDescription("Use in a Shortcuts automation when a reels app opens. Doomscore shows your live count and makes sure the counter is running.")
+    static var description = IntentDescription("Use in a Shortcuts automation when a reels app opens. Doomscore shows your live count in the Dynamic Island right away.")
     static var openAppWhenRun: Bool = false
 
     @Parameter(title: "App", default: .instagram)
@@ -54,9 +55,13 @@ struct ReelsAppOpenedIntent: LiveActivityIntent {
 
         guard settings.trackedApps.contains(source) else { return .result() }
 
-        let armed = store.isArmed(now: now)
-        await LiveActivityService.shared.showCounting(app: source, armed: armed)
-        guard !armed else { return .result() }
+        let precise = store.isArmed(now: now)
+        let screenTime = ScreenTimeService.shared
+        screenTime.refreshStatus()
+        let auto = screenTime.isTracking && ScreenTimeSlot.allCases.contains { $0.app == source && screenTime.hasApp(for: $0) }
+        await LiveActivityService.shared.showCounting(app: source, armed: precise || auto)
+        await LiveActivityService.shared.waitForTokenRegistration()
+        if precise || (auto && !settings.preciseAutoPrompt) { return .result() }
 
         #if DS_INTENT_MODES && compiler(>=6.2)
         if #available(iOS 26.0, *) {
@@ -94,6 +99,7 @@ struct ReelsAppClosedIntent: LiveActivityIntent {
         }
         if settings.closeAutomationSeenAt == nil { settings.closeAutomationSeenAt = now }
         DarwinCenter.shared.post(DarwinName.hintChanged)
+        ScreenTimeService.shared.endSessionNow()
         await LiveActivityService.shared.endSession()
         return .result()
     }
@@ -105,9 +111,10 @@ struct TodayCountIntent: AppIntent {
     static var description = IntentDescription("Tells you how many reels you've scrolled today.")
 
     func perform() async throws -> some IntentResult & ReturnsValue<Int> & ProvidesDialog {
-        let today = SharedStore.shared.todayRecord().total
+        let record = SharedStore.shared.todayRecord()
+        let today = record.total
         let mood = Mood.from(count: today, goal: SharedSettings.shared.dailyGoal)
-        let text = "\(today) reels today. \(mood.title) \(mood.emoji)"
+        let text = "\(record.isEstimated ? "About " : "")\(today) reels today. \(mood.title) \(mood.emoji)"
         return .result(value: today, dialog: IntentDialog(stringLiteral: text))
     }
 }

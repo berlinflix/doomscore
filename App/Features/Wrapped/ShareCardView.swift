@@ -37,7 +37,7 @@ struct ShareCardView: View {
                     .foregroundStyle(.white.opacity(0.9))
 
                 VStack(spacing: 10) {
-                    row("⏱️", "time in reels", Fmt.duration(summary.watchSeconds))
+                    row("⏱️", "time scrolling", Fmt.duration(summary.watchSeconds))
                     row("📏", "content scrolled", String(format: "%.0f m", summary.thumbMeters))
                     if let peak = summary.peakHour { row("🦉", "doom hour", Fmt.hour(peak)) }
                     row("🧊", "chill streak", "\(summary.longestChillStreak)d")

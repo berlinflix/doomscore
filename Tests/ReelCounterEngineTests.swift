@@ -41,6 +41,16 @@ final class ReelCounterEngineTests: XCTestCase {
         return decisions
     }
 
+    /// A full-screen change that isn't a swipe (new footage on screen).
+    private func cut() {
+        let config = DetectorConfig()
+        let width = config.motion.gridWidth
+        let height = config.motion.gridHeight
+        _ = engine.process(grid: TestGrids.textured(width: width, height: height, seed: Int(clock * 10) + 1), at: clock)
+        clock += 0.05
+        _ = engine.process(grid: TestGrids.textured(width: width, height: height, seed: Int(clock * 10) + 777), at: clock)
+    }
+
     private func counted(_ decisions: [CountDecision]) -> Int {
         decisions.filter { if case .counted = $0 { true } else { false } }.count
     }
@@ -131,8 +141,35 @@ final class ReelCounterEngineTests: XCTestCase {
     func testImplicitChangeCountsWhenSwipeWasMissed() {
         _ = enterReels(handle: "creator.one")
         clock += 5
-        let decisions = engine.process(reading: reading(handle: "someone.else", caption: "brand new video caption"))
-        XCTAssertEqual(counted(decisions), 1)
+        cut() // the picture changed but no swipe was seen (dropped frames)
+        clock += 0.4
+        let first = engine.process(reading: reading(handle: "someone.else", caption: "brand new video caption"))
+        XCTAssertEqual(counted(first), 0, "one reading isn't proof")
+        clock += 1
+        let second = engine.process(reading: reading(handle: "someone.else", caption: "brand new video caption"))
+        XCTAssertEqual(counted(second), 1)
+    }
+
+    func testOverlayMisreadsWithoutAPictureChangeNeverCount() {
+        _ = enterReels(handle: "creator.one")
+        for i in 0..<4 {
+            clock += 1.1
+            let decisions = engine.process(reading: reading(handle: "misread\(i)x", caption: "garbled words number \(i)"))
+            XCTAssertEqual(counted(decisions), 0)
+        }
+    }
+
+    func testOneOffMisreadAfterACutIsDropped() {
+        _ = enterReels(handle: "creator.one")
+        clock += 3
+        cut() // a jump cut inside the same video
+        clock += 0.4
+        XCTAssertEqual(counted(engine.process(reading: reading(handle: "crea7or.xyz", caption: "noise noise noise"))), 0)
+        clock += 1
+        XCTAssertEqual(counted(engine.process(reading: reading(handle: "creator.one", caption: "first reel caption here"))), 0)
+        clock += 1
+        XCTAssertEqual(counted(engine.process(reading: reading(handle: "crea7or.xyz", caption: "noise noise noise"))), 0,
+                       "the earlier suspicion was cleared when the real reel was read again")
     }
 
     func testSameOverlayAfterFalseSwipeIsIgnored() {

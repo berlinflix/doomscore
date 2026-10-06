@@ -22,23 +22,28 @@
 <body>
 <main>
   <h1>Privacy Policy</h1>
-  <p class="muted">Doomscore · Effective 30 September 2026</p>
+  <p class="muted">Doomscore · Effective 6 October 2026</p>
 
   <div class="card">
-    <p><strong>The short version:</strong> Doomscore counts the reels you scroll. It looks at your screen only after you
-    start the counter, does all the analysis on your iPhone, and never records, stores or uploads what's on your screen.
-    If you join Scroll Battle, only your handle and your daily numbers are shared — with you and the friends you add.</p>
+    <p><strong>The short version:</strong> Doomscore estimates the reels you scroll from how long Instagram or TikTok is
+    open, using Apple's Screen Time. It never sees your screen in that mode. Optional precise mode looks at your screen
+    only after you start it, does all the analysis on your iPhone, and never records, stores or uploads what's on your
+    screen. If you join Scroll Battle, only your handle and your daily numbers are shared — with you and the friends you add.</p>
   </div>
 
   <h2>1. What happens on your iPhone</h2>
   <ul>
-    <li><strong>Screen analysis.</strong> When you start the counter, iOS lets Doomscore's broadcast extension see your
+    <li><strong>Auto mode (Screen Time).</strong> With your permission (Face ID), iOS tells Doomscore each time an app you
+      picked — like Instagram — reaches another minute of use. Doomscore never learns what you watched, which other apps
+      you use, or anything on your screen; the apps you pick are hidden from us behind anonymous tokens. You can turn this
+      off anytime in Settings or in iOS Settings → Screen Time.</li>
+    <li><strong>Precise mode (optional).</strong> When you start it, iOS lets Doomscore's broadcast extension see your
       screen (you'll see the red recording indicator). Each frame is reduced in memory to motion data and a quick
       on-device text reading (for example the “Sponsored” label) to detect reel swipes, ads and repeats. Frames and
       text are discarded immediately. Nothing is saved, recorded or sent anywhere.</li>
-    <li><strong>What we store on your device:</strong> daily, hourly and per-app reel counts, time spent in reels, ads
-      and rewatches skipped, sessions, your settings, and one-way (salted, hashed) fingerprints of reels seen today so
-      they aren't counted twice. Fingerprints are deleted daily.</li>
+    <li><strong>What we store on your device:</strong> daily, hourly and per-app reel counts and estimates, minutes of use
+      for the apps you picked, ads and rewatches skipped, sessions, your settings, and one-way (salted, hashed)
+      fingerprints of reels seen today so they aren't counted twice. Fingerprints are deleted daily.</li>
     <li>You can export or delete this data anytime in Settings.</li>
   </ul>
 
@@ -47,7 +52,8 @@
     <li><strong>Account:</strong> a random account ID. With Sign in with Apple we don't ask Apple for your name or email.
       Quick start creates an anonymous account.</li>
     <li><strong>Profile:</strong> the handle, display name, emoji, colour and daily cap you choose.</li>
-    <li><strong>Daily totals per app:</strong> number of reels, seconds watched, ads skipped. Never which reels, creators or content.</li>
+    <li><strong>Daily totals per app:</strong> number of reels (including estimates), seconds watched, ads skipped. Never
+      which reels, creators or content, and never your Screen Time data beyond these totals.</li>
     <li><strong>Technical:</strong> a device credential (stored only as a hash) used to upload totals, and Live Activity
       push tokens used to update the counter in your Dynamic Island.</li>
   </ul>
@@ -62,7 +68,7 @@
   <h2>4. Service providers</h2>
   <ul>
     <li><strong>Supabase</strong> hosts the database and sign-in for Scroll Battle.</li>
-    <li><strong>Apple</strong> provides Sign in with Apple and the push service that updates Live Activities.</li>
+    <li><strong>Apple</strong> provides Screen Time, Sign in with Apple and the push service that updates Live Activities.</li>
   </ul>
 
   <h2>5. Keeping and deleting your data</h2>

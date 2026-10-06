@@ -3,18 +3,29 @@ import Observation
 import SwiftUI
 import WidgetKit
 
-/// App-wide state. Reads what the broadcast extension writes to the App Group
-/// and refreshes live when it pings (Darwin notifications).
+/// App-wide state. Reads what the extensions (Screen Time monitor, broadcast)
+/// write to the App Group and refreshes live when they ping (Darwin notifications).
 @MainActor
 @Observable
 final class AppModel {
     static let shared = AppModel()
 
+    /// How reels are being counted right now.
+    enum TrackingMode: Equatable {
+        case off
+        /// Screen Time minutes × pace — always on, no broadcast.
+        case auto
+        /// Screen broadcast — every reel, ads and rewatches skipped.
+        case precise
+    }
+
     let router = Router()
     let battle = BattleStore()
+    let screenTime = ScreenTimeService.shared
 
     private(set) var ledger = Ledger()
     private(set) var live: LiveState?
+    private(set) var screenSession: ScreenTimeSession?
     private(set) var goal = 100
     private(set) var streak = StreakInfo(current: 0, best: 0, todayAlive: true)
     private(set) var automationVerified = false
@@ -27,6 +38,7 @@ final class AppModel {
     private let settings = SharedSettings.shared
     @ObservationIgnored private var observers: [UUID] = []
     @ObservationIgnored private var pollTask: Task<Void, Never>?
+    @ObservationIgnored private var screenTimeFileDate: Date?
 
     private init() {
         reload()
@@ -41,9 +53,21 @@ final class AppModel {
         return ledger[key] ?? DayRecord(day: key)
     }
 
+    /// Precise mode (screen broadcast) is running.
     var isArmed: Bool { live?.isArmed() ?? false }
+
+    var trackingMode: TrackingMode {
+        if isArmed { return .precise }
+        return screenTime.isTracking ? .auto : .off
+    }
+
     var mood: Mood { Mood.from(count: today.total, goal: goal) }
-    var sessionCount: Int { isArmed ? (live?.sessionCount ?? 0) : 0 }
+
+    var sessionCount: Int {
+        if isArmed { return live?.sessionCount ?? 0 }
+        guard let session = screenSession, Date().timeIntervalSince(session.lastEventAt) < ScreenTimeEstimator.sessionGap else { return 0 }
+        return Int(session.reels.rounded())
+    }
 
     /// Stable per-day seed so quips don't change on every refresh.
     var daySeed: Int { Calendar.current.ordinality(of: .day, in: .era, for: Date()) ?? 0 }
@@ -53,8 +77,11 @@ final class AppModel {
     // MARK: Loading
 
     func reload() {
+        screenTime.calibrateFromPreciseDays(exact: store.exactLedger())
+        screenTimeFileDate = store.modificationDate(of: .screenTime)
         ledger = store.mergedLedger()
         live = store.live
+        screenSession = store.screenTime?.session
         goal = settings.dailyGoal
         trackedApps = settings.trackedApps
         automationVerified = settings.automationVerifiedAt != nil
@@ -63,10 +90,16 @@ final class AppModel {
     }
 
     func reloadLive() {
+        // The Screen Time monitor wrote something we missed a ping for.
+        if store.modificationDate(of: .screenTime) != screenTimeFileDate {
+            reload()
+            return
+        }
         let latest = store.live
         guard latest != live else { return }
         live = latest
-        if let today = latest?.today {
+        if let exact = latest?.today {
+            let today = store.effective(exact)
             if let existing = ledger[today.day], existing.updatedAt > today.updatedAt {
                 // ledger is newer — keep it
             } else {
@@ -95,6 +128,9 @@ final class AppModel {
         observers.append(center.observe(DarwinName.broadcastFinished) {
             Task { @MainActor in AppModel.shared.reload() }
         })
+        observers.append(center.observe(DarwinName.screenTimeChanged) {
+            Task { @MainActor in AppModel.shared.reload() }
+        })
     }
 
     // MARK: Scene lifecycle
@@ -102,6 +138,7 @@ final class AppModel {
     func scenePhaseChanged(_ phase: ScenePhase) {
         switch phase {
         case .active:
+            screenTime.ensureMonitoring()
             reload()
             consumePendingRoute()
             startPolling()
@@ -181,16 +218,29 @@ final class AppModel {
     func resetAllData() {
         store.removeAll()
         DarwinCenter.shared.post(DarwinName.dataReset)
+        // Thresholds restart from zero with the wiped history.
+        screenTime.ensureMonitoring(force: true)
         reload()
         WidgetCenter.shared.reloadAllTimelines()
     }
 
+    func setScrollStyle(_ style: ScrollStyle) {
+        settings.scrollStyle = style
+        DarwinCenter.shared.post(DarwinName.settingsChanged)
+    }
+
+    /// Reels per minute used for Screen Time estimates.
+    func pace(for slot: ScreenTimeSlot) -> Double { settings.pace(for: slot) }
+
+    /// Whether precise mode has measured this user's real pace yet.
+    var isPaceCalibrated: Bool { !settings.calibratedPaces.isEmpty }
+
     /// CSV of daily totals for "export my data".
     func exportCSV() -> URL? {
-        var lines = ["date,total,instagram,youtube,tiktok,snapchat,other,watch_minutes,ads_skipped,rewatches_skipped,sessions"]
+        var lines = ["date,total,estimated,instagram,youtube,tiktok,snapchat,other,screen_time_minutes,watch_minutes,ads_skipped,rewatches_skipped,sessions"]
         for record in ledger.days.values.sorted(by: { $0.day < $1.day }) {
             let apps = SourceApp.allCases.map { String(record.count(for: $0)) }.joined(separator: ",")
-            lines.append("\(record.day.rawValue),\(record.total),\(apps),\(Int(record.watchSeconds / 60)),\(record.adsSkipped),\(record.rewatchesSkipped),\(record.sessions)")
+            lines.append("\(record.day.rawValue),\(record.total),\(record.estimatedReels),\(apps),\(record.screenMinutes),\(Int(record.watchSeconds / 60)),\(record.adsSkipped),\(record.rewatchesSkipped),\(record.sessions)")
         }
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("doomscore-export.csv")
         do {

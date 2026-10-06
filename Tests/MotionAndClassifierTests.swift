@@ -70,19 +70,26 @@ final class ScreenClassifierTests: XCTestCase {
     }
 
     /// Roughly how Instagram Reels lays out its overlay.
-    private func instagramReel(sponsored: Bool = false, handle: String = "creator.one") -> [TextItem] {
+    private func instagramReel(sponsored: Bool = false, handle: String = "creator.one", following: Bool = false) -> [TextItem] {
         var items = [
             item("Reels", x: 0.04, y: 0.06, w: 0.15),
             item("12.4K", x: 0.86, y: 0.52, w: 0.1),
             item("312", x: 0.87, y: 0.60, w: 0.08),
             item("1,093", x: 0.86, y: 0.68, w: 0.1),
             item(handle, x: 0.14, y: 0.80, w: 0.25),
-            item("Follow", x: 0.42, y: 0.80, w: 0.12),
             item("when the reel hits different at 3am", x: 0.04, y: 0.85, w: 0.6),
             item("Original audio", x: 0.1, y: 0.90, w: 0.3),
         ]
+        if !following { items.append(item("Follow", x: 0.42, y: 0.80, w: 0.12)) }
         if sponsored { items.append(item("Sponsored", x: 0.14, y: 0.825, w: 0.2)) }
         return items
+    }
+
+    /// CapCut-style captions burned into the video: big, centred, a new word every second.
+    private func subtitles(_ words: [String]) -> [TextItem] {
+        words.enumerated().map { index, word in
+            item(word, x: 0.3, y: 0.62 + CGFloat(index) * 0.07, w: 0.4, h: 0.06)
+        }
     }
 
     func testRecognisesInstagramReels() {
@@ -104,6 +111,38 @@ final class ScreenClassifierTests: XCTestCase {
         var items = instagramReel(handle: "somebrand")
         items.append(item("Shop now", x: 0.05, y: 0.74, w: 0.7))
         XCTAssertTrue(classifier.classify(items, hint: nil, at: 0).isAd)
+    }
+
+    func testBurnedInSubtitlesNeverBecomeTheIdentity() {
+        // Already following the creator → no Follow button to anchor on.
+        let first = classifier.classify(instagramReel(following: true) + subtitles(["WAIT", "FOR IT"]), hint: nil, at: 0)
+        let second = classifier.classify(instagramReel(following: true) + subtitles(["INSANE", "ENDING"]), hint: nil, at: 1)
+        XCTAssertEqual(first.kind, .shortVideo)
+        XCTAssertEqual(first.identity?.handle, "creator.one")
+        XCTAssertEqual(first.identity?.caption, second.identity?.caption)
+        if let a = first.identity, let b = second.identity {
+            XCTAssertEqual(a.compare(b), .same, "changing subtitles must not look like a new reel")
+        } else {
+            XCTFail("identity missing")
+        }
+    }
+
+    func testSubtitleWordsDontLookLikeAds() {
+        let items = instagramReel() + [item("DOWNLOAD THIS NOW", x: 0.1, y: 0.7, w: 0.8, h: 0.07)]
+        XCTAssertFalse(classifier.classify(items, hint: nil, at: 0).isAd)
+    }
+
+    func testRecognisesReelsWithoutLikeCounts() {
+        // Creator hid likes and you already follow them: one rail number + audio line.
+        let items = [
+            item("312", x: 0.87, y: 0.60, w: 0.08),
+            item("creator.one", x: 0.14, y: 0.80, w: 0.25),
+            item("when the reel hits different at 3am", x: 0.04, y: 0.85, w: 0.6),
+            item("♫ creator.one · Original audio", x: 0.1, y: 0.90, w: 0.5),
+        ]
+        let reading = classifier.classify(items, hint: .instagram, at: 0)
+        XCTAssertEqual(reading.kind, .shortVideo)
+        XCTAssertEqual(reading.identity?.handle, "creator.one")
     }
 
     func testCommentsSheet() {

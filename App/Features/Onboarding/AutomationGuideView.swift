@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// One-time Shortcuts automation setup — the iOS equivalent of Android's
-/// "open automatically when Instagram opens". After this, opening a reels app
-/// runs Doomscore's intent in the background: it shows the live counter and,
-/// if the counter is off, brings up the one-tap arm screen by itself (iOS 26+)
-/// or nudges you with a notification (older iOS).
+/// Optional one-time Shortcuts automation. Auto mode (Screen Time) already
+/// counts without it; the automation makes the Dynamic Island appear the
+/// instant a reels app opens (instead of after the first minute) and close
+/// when it closes. With precise mode it can also bring up the one-tap arm
+/// screen (iOS 26+) or a nudge (older iOS).
 struct AutomationGuideView: View {
     var showsDoneButton = false
 
@@ -17,17 +17,17 @@ struct AutomationGuideView: View {
         ("app.badge.fill", "Choose “App”", "Select Instagram (add YouTube / TikTok too if you want). Keep “Is Opened” ticked."),
         ("bolt.fill", "Pick “Run Immediately”", "Turn OFF “Notify When Run” so it's invisible. Tap Next."),
         ("magnifyingglass", "Add “Reels App Opened”", "Search Doomscore → pick “Reels App Opened” → set the app → Done."),
-        ("plus.square.on.square", "Optional: “Is Closed” too", "Make a second automation with “Is Closed” → “Reels App Closed”. Better accuracy + battery."),
+        ("plus.square.on.square", "Recommended: “Is Closed” too", "Make a second automation with “Is Closed” → “Reels App Closed”. The island closes the moment you leave."),
     ]
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("auto-start ⚡️")
+                    Text("instant island ⚡️")
                         .font(Theme.display(32))
                         .foregroundStyle(Theme.text)
-                    Text("iOS doesn't let apps launch themselves, but Shortcuts can do it for us. 30 seconds, once.")
+                    Text("optional. your count already updates on its own — this makes the Dynamic Island pop up the second you open Instagram. 30 seconds, once.")
                         .font(Theme.body(15, weight: .semibold))
                         .foregroundStyle(Theme.textDim)
                 }
@@ -61,10 +61,10 @@ struct AutomationGuideView: View {
 
                 Card {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("pro tip: Control Center 🎛️")
+                        Text("pro tip: precise mode from Control Center 🎛️")
                             .font(Theme.body(15, weight: .heavy))
                             .foregroundStyle(Theme.text)
-                        Text("Add the “Count Reels” control, or long-press Screen Recording → pick Doomscore → Start Broadcast. Arms the counter without opening the app.")
+                        Text("Add the “Count Reels” control, or long-press Screen Recording → pick Doomscore → Start Broadcast. Starts precise mode without opening the app.")
                             .font(Theme.body(13, weight: .semibold))
                             .foregroundStyle(Theme.textDim)
                     }
@@ -88,7 +88,7 @@ struct AutomationGuideView: View {
                     .font(.system(size: 26, weight: .bold))
                     .foregroundStyle(model.automationVerified ? Theme.lime : Theme.textDim)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(model.automationVerified ? "auto-start works ✅" : "waiting for the first run…")
+                    Text(model.automationVerified ? "instant island works ✅" : "waiting for the first run…")
                         .font(Theme.body(16, weight: .heavy))
                         .foregroundStyle(Theme.text)
                     Text(model.automationVerified

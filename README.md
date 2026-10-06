@@ -4,58 +4,63 @@
 
 # Doomscore 🫠 — how cooked are you today?
 
-An iOS reel counter with Gen-Z energy. It counts every reel you swipe on Instagram, YouTube
-Shorts, TikTok and Snapchat Spotlight, skips ads and rewatches, shows your count live in the
-Dynamic Island, and lets you battle friends over who's the most cooked.
+An iOS reel counter with Gen-Z energy. It tracks your Instagram and TikTok scrolling all day
+in the background, with no screen recording, shows your count in the Dynamic Island, and lets
+you battle friends over who's the most cooked. An optional precise mode counts every single
+reel on Instagram, YouTube Shorts, TikTok and Snapchat Spotlight, skipping ads and rewatches.
 
 ## Features
 
 | | |
 |---|---|
-| 🔢 **Live reel counter** | Counts paged swipes in Reels / Shorts / TikTok / Spotlight |
-| 🥷 **No ads, no rewatches** | Skips "Sponsored" and CTA reels, back-swipes and already-seen reels, loops and resumes |
-| ⚡️ **Auto-start** | A Shortcuts automation fires when Instagram opens. No need to open Doomscore first |
-| 🏝️ **Dynamic Island / Lock Screen** | Live Activity counter (the iOS version of the floating bubble) |
+| ⏳ **Auto mode** | Screen Time tracks Instagram / TikTok minutes in the background (no recording, no taps) and turns them into reels with your scroll pace |
+| 🎯 **Precise mode** | Optional: counts every paged swipe in Reels / Shorts / TikTok / Spotlight, skips ads and rewatches, and calibrates auto mode's pace |
+| 🏝️ **Dynamic Island / Lock Screen** | Live Activity with a cap ring, live count, session timer, session count and streak (the iOS version of the floating bubble) |
+| ⚡️ **Instant island** | Optional Shortcuts automation: the island appears the second Instagram opens and closes when it closes |
 | 🧩 **Widgets** | Small, medium and lock screen counters, a battle widget, and a Control Center "Count Reels" button |
 | ⚔️ **Scroll Battle** | Friends leaderboard (today / week), "most cooked" or "touch grass" modes, invite links |
 | 🧊 **Chill streaks** | Days in a row at or under your daily cap, plus your best streak |
 | 📼 **Wrapped** | Story-style weekly, monthly and yearly recap: totals, time, meters scrolled, doom hour, wildest day, personality archetype, shareable card |
 | 📊 **Progress** | Day, week, month and year charts, per-app split, averages, highest day |
-| 🔒 **Private by design** | On-device detection. Only daily numbers ever sync |
+| 🔒 **Private by design** | Auto mode never sees the screen; precise mode analyses it on-device. Only daily numbers ever sync |
 
 ## How it works (short version)
 
 Android reel counters read Instagram's view tree with an Accessibility Service and draw an
-overlay (see [docs/ANDROID_TEARDOWN.md](docs/ANDROID_TEARDOWN.md)). iOS allows neither, so
-Doomscore uses:
+overlay (see [docs/ANDROID_TEARDOWN.md](docs/ANDROID_TEARDOWN.md)). iOS has no equivalent:
+no app can read another app's screen without a screen broadcast. So Doomscore has two modes:
 
-1. **Broadcast Upload Extension (ReplayKit).** The only sanctioned way to "see" other apps.
-   Frames are shrunk to motion thumbnails and read with on-device OCR, then thrown away.
-2. **Shortcuts automation + App Intents.** "When Instagram is opened → Reels App Opened"
-   runs silently. It starts the Dynamic Island counter and, if the counter is off, brings up
-   a one-tap arm screen (iOS 26+) or sends a nudge (iOS 18–25).
+1. **Auto mode: Screen Time API (FamilyControls + DeviceActivity).** After one Face ID
+   approval and picking Instagram, iOS wakes a tiny monitor extension at every minute of
+   Instagram use. Doomscore multiplies minutes by your pace (reels per minute) and shows the
+   result with "≈". It runs all day, even when the app is closed, and never sees content.
+2. **Precise mode: Broadcast Upload Extension (ReplayKit).** The only way to count individual
+   reels on iOS. Frames are shrunk to motion thumbnails and read with on-device OCR, then
+   thrown away. It needs one tap in the system sheet per session and shows the red pill.
+   Every precise session teaches auto mode your real pace.
 3. **Live Activity via your backend.** Extensions can't update Live Activities, so counts go
-   to your Supabase `ingest` function, which pushes updates through APNs.
+   to your Supabase `ingest` function, which pushes start, update and end events through APNs.
 
 The full design is in [docs/IOS_ARCHITECTURE.md](docs/IOS_ARCHITECTURE.md).
 
-> iOS limit, stated honestly: starting a screen broadcast always needs **one tap** from the
-> user in the system sheet. After that, counting is automatic until you stop it or iOS ends the broadcast (usually when the phone locks).
+> Stated honestly: Screen Time only reports minutes, so auto mode's reels are an estimate
+> (marked ≈). Only precise mode counts exact reels, and only it can tell ads and rewatches apart.
 
 ## Repo layout
 
 ```
-project.yml                XcodeGen spec (4 targets)
+project.yml                XcodeGen spec (5 targets)
 Config/                    Base.xcconfig (+ your Secrets.xcconfig)
 App/                       SwiftUI app: screens, services, App Intents, assets
-Broadcast/                 Broadcast Upload Extension: frame sampling, Vision OCR, recorder
+ActivityMonitor/           Screen Time monitor extension (auto mode)
+Broadcast/                 Broadcast Upload Extension (precise mode): frames, Vision OCR, recorder
 Detection/                 Pure counting logic: motion, classifier, engine (unit tested)
 Widgets/                   WidgetKit widgets, Live Activity UI, Control Center control
-Shared/Core                Models, App Group store, stats/streaks, sync client (all targets)
+Shared/Core                Models, Screen Time estimator, App Group store, stats, sync client
 Shared/UI                  Theme, Goob mascot, Live Activity attributes (app + widgets)
-Tests/                     XCTest: engine, motion, classifier, stats
+Tests/                     XCTest: engine, motion, classifier, Screen Time estimator, stats
 backend/                   Supabase: SQL (RLS, RPCs, anti-cheat), Edge Functions (ingest, APNs)
-web/                       Invite landing page + apple-app-site-association
+web/                       Invite landing page, privacy policy, apple-app-site-association
 docs/                      Teardown, architecture, security, App Review, detector tuning
 ```
 
@@ -64,9 +69,8 @@ docs/                      Teardown, architecture, security, App Review, detecto
 The full walk-through, including the Apple Developer portal setup, is in
 **[docs/SETUP_MAC.md](docs/SETUP_MAC.md)**. The short version:
 
-1. The Apple Developer portal is already set up (App Group + three App IDs under
-   `com.gridcc.doomscore`), and `Config/Base.xcconfig` already holds the Team ID, bundle IDs
-   and the `doomscore.gridcc.tech` domain.
+1. The Apple Developer portal is set up under `com.gridcc.doomscore`, and
+   `Config/Base.xcconfig` already holds the Team ID, bundle IDs and the `doomscore.gridcc.tech` domain.
 2. Install XcodeGen, generate the project and open it:
 
 ```bash
@@ -81,18 +85,16 @@ xcodegen generate
 open Doomscore.xcodeproj
 ```
 
-3. Run on a real iPhone (ReplayKit broadcasts don't run in the Simulator), arm the counter
-   and scroll some reels.
-4. Set up the Shortcuts automation so opening Instagram starts things by itself.
-5. Optional: set up the backend in [backend/README.md](backend/README.md) for battles and
-   live Dynamic Island updates. Without it, the app runs in local-only mode.
+3. Run on a real iPhone (Screen Time and broadcasts don't work in the Simulator), connect
+   Screen Time in onboarding, pick Instagram, and go scroll.
+4. Optional: the "instant island" Shortcuts automation, and precise mode for exact counts.
 
 Tests: pick an iPhone Simulator and press ⌘U.
 
 ## Before you ship
 
-- Tune the detector on real devices with Settings → Detector lab
+- Request the **Family Controls (Distribution)** entitlement from Apple for the app and the
+  monitor extension. Development builds work without it; TestFlight and the App Store don't.
+- Tune precise mode on real devices with Settings → Detector lab
   ([docs/DETECTOR_TUNING.md](docs/DETECTOR_TUNING.md)).
 - Host a privacy policy, fill in the privacy labels, and attach a demo video for review.
-- Phase 2 ideas: Screen Time API estimates and blocking (needs Apple's FamilyControls
-  entitlement), App Attest, a Core ML screen classifier, and a Pro tier.

@@ -5,7 +5,8 @@ import Foundation
 /// (pushed from `DS_REMOTE_CONFIG_URL`) — so when Instagram changes its UI you
 /// can fix detection without an App Store release.
 struct DetectorConfig: Codable, Sendable, Equatable {
-    static let currentVersion = 1
+    /// Remote configs with another version are ignored (defaults are used).
+    static let currentVersion = 2
 
     struct Motion: Codable, Sendable, Equatable {
         /// Luma grid used for motion estimation (portrait aspect ≈ 1:2.17).
@@ -62,6 +63,13 @@ struct DetectorConfig: Codable, Sendable, Equatable {
         var captionMaxY = 0.935
         var tabBarMinY = 0.935
         var adMinY = 0.52
+        /// The app's overlay (username, caption, buttons) uses small text;
+        /// subtitles and meme text burned into videos are big. Taller lines
+        /// never count as identity, ads or layout.
+        var maxOverlayTextHeight = 0.034
+        /// Overlay lines start at the left edge (after the avatar); centred
+        /// subtitles don't.
+        var overlayMaxMinX = 0.24
     }
 
     struct Keywords: Codable, Sendable, Equatable {
@@ -88,6 +96,8 @@ struct DetectorConfig: Codable, Sendable, Equatable {
         ]
         /// Lines in the caption area that are never a username or caption.
         var captionNoise = ["more", "original audio", "paid partnership", "see translation", "follow", "subscribe", "sponsored"]
+        /// The audio line under a reel's caption ("♫ name · Original audio").
+        var audioLine = ["original audio", "original sound", "audio original", "son original", "originalton"]
     }
 
     var version = DetectorConfig.currentVersion
@@ -106,6 +116,8 @@ struct DetectorConfig: Codable, Sendable, Equatable {
     var pendingDeadline = 1.8
     /// Minimum gap between two implicit (OCR-only) page changes.
     var implicitChangeCooldown = 0.9
+    /// Readings that must agree on a new reel before an implicit change counts.
+    var implicitConfirmations = 2
     /// Coming back to the same feed within this window is a resume, not a new reel.
     var resumeGuardSeconds = 90.0
     /// Reset the "furthest reel seen" cursor after this long outside reels.

@@ -1,10 +1,11 @@
 import ReplayKit
 import SwiftUI
 
-/// "Arm the counter": starts the screen-broadcast extension that watches for
-/// reel swipes. iOS requires one confirmation tap in the system sheet — we
-/// open that sheet automatically and bounce the user back to their reels app
-/// as soon as the counter is live.
+/// Precise mode: starts the screen-broadcast extension that counts every reel
+/// swipe (skipping ads and rewatches). Optional — auto mode (Screen Time)
+/// works without it. iOS requires one confirmation tap in the system sheet —
+/// we open that sheet automatically and bounce the user back to their reels
+/// app as soon as counting is live.
 struct ArmView: View {
     let auto: Bool
     let returnTo: SourceApp?
@@ -50,7 +51,7 @@ struct ArmView: View {
                         phase = .waiting
                         picker.trigger()
                     } label: {
-                        Label("start counting", systemImage: "record.circle.fill")
+                        Label("start precise mode", systemImage: "record.circle.fill")
                     }
                     .buttonStyle(ChunkyButtonStyle())
                     Text("then tap **Start Broadcast** · stop anytime from the red status pill")
@@ -89,25 +90,26 @@ struct ArmView: View {
 
     private var title: String {
         switch phase {
-        case .ready: "ready to get counted?"
+        case .ready: "precise mode 🎯"
         case .waiting: "tap Start Broadcast 👇"
-        case .live: "you're live ✅"
+        case .live: "precise mode is on ✅"
         }
     }
 
     private var subtitle: String {
         switch phase {
-        case .ready: "Doomscore watches for swipes (not your content) so every reel gets counted — no ads, no rewatches."
-        case .waiting: "that's iOS asking permission. it's a one-tap thing."
-        case .live: returnTo.map { "sending you back to \($0.displayName)…" } ?? "go scroll. we'll keep count."
+        case .ready: "counts every single reel — skips ads + rewatches — and teaches auto mode your real pace. totally optional."
+        case .waiting: "that's iOS's standard screen-broadcast sheet. iOS words it scary; we only look for swipes."
+        case .live: returnTo.map { "sending you back to \($0.displayName)…" } ?? "go scroll. we'll keep exact count."
         }
     }
 
     private var privacyCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("processed on your phone, nothing recorded", systemImage: "lock.fill")
-            Label("only the number syncs to your battles", systemImage: "number")
+            Label("analysed on your phone, never recorded or uploaded", systemImage: "lock.fill")
+            Label("only the daily number syncs to your battles", systemImage: "number")
             Label("stop anytime: tap the red pill up top", systemImage: "hand.tap.fill")
+            Label("don't want this? auto mode needs none of it", systemImage: "hourglass")
         }
         .font(Theme.body(14, weight: .bold))
         .foregroundStyle(Theme.text)

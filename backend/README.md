@@ -72,7 +72,10 @@ DS_SUPABASE_ANON_KEY = <anon or publishable key>
   `create_invite`, `accept_invite`, `remove_friend`, `register_device`,
   `delete_account`), server-only `ingest_stats` + `device_user`.
 * `functions/ingest` — validates totals, stores them, mirrors the count to the user's
-  Live Activity via APNs (update or push-to-start).
+  Live Activity via APNs: push-to-start for a new visit, updates (4-minute stale date in
+  auto mode), and an `end` event when the Screen Time monitor reports the visit is over
+  (`live.ended`). Optional `live` fields `estimated`, `sessionStart` and `streak` are
+  passed through to the island; older app builds that don't send them still work.
 * `functions/activity` — registers/removes Live Activity push tokens.
 
 ## 6. Invite links + privacy page (doomscore.gridcc.tech)
@@ -84,5 +87,6 @@ DS_SUPABASE_ANON_KEY = <anon or publishable key>
 
 ## Costs
 
-Free tier comfortably covers early users: ingest is ~1 small request per 4 s per active
-scroller, leaderboard reads every 30 s while the battle tab is open.
+Free tier comfortably covers early users: ingest is ~1 small request per minute of
+scrolling in auto mode (per 4 s in precise mode), leaderboard reads every 30 s while the
+battle tab is open.

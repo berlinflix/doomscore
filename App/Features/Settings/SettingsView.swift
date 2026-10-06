@@ -9,7 +9,9 @@ struct SettingsView: View {
     @State private var goal = 100
     @State private var strictMode = SharedSettings.shared.strictPrivacyMode
     @State private var nudges = SharedSettings.shared.nudgesEnabled
+    @State private var preciseAutoPrompt = SharedSettings.shared.preciseAutoPrompt
     @State private var diagnostics = SharedSettings.shared.diagnosticsEnabled
+    @State private var paceReset = false
     @State private var confirmReset = false
     @State private var confirmDelete = false
     @State private var exportURL: URL?
@@ -29,25 +31,31 @@ struct SettingsView: View {
                     .onChange(of: goal) { _, value in model.setGoal(value) }
                 }
 
+                autoSection
+
                 Section {
                     HStack {
-                        Label(model.isArmed ? "counter is on" : "counter is off", systemImage: model.isArmed ? "record.circle.fill" : "record.circle")
+                        Label(model.isArmed ? "precise mode is on" : "precise mode is off", systemImage: model.isArmed ? "record.circle.fill" : "record.circle")
                             .foregroundStyle(model.isArmed ? Theme.lime : Theme.textDim)
                         Spacer()
                         if model.isArmed {
                             Button("stop", role: .destructive) { model.stopCounting() }
                         } else {
-                            Button("arm") {
+                            Button("start") {
                                 dismiss()
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { router.sheet = .arm(auto: false, returnTo: nil) }
                             }
                         }
                     }
-                    NavigationLink("auto-start setup") { AutomationGuideView() }
-                    Toggle("nudge me if the counter's off", isOn: $nudges)
+                    NavigationLink("instant island (Shortcuts)") { AutomationGuideView() }
+                    Toggle("offer precise mode when I open a reels app", isOn: $preciseAutoPrompt)
+                        .onChange(of: preciseAutoPrompt) { _, value in SharedSettings.shared.preciseAutoPrompt = value }
+                    Toggle("nudge me when nothing's tracking", isOn: $nudges)
                         .onChange(of: nudges) { _, value in SharedSettings.shared.nudgesEnabled = value }
                 } header: {
-                    Text("counting")
+                    Text("precise mode (optional)")
+                } footer: {
+                    Text("Precise mode counts every reel with an on-device screen broadcast, skipping ads and rewatches. It's optional — auto mode works without it — and each session teaches auto mode your real pace.")
                 }
 
                 Section {
@@ -60,7 +68,7 @@ struct SettingsView: View {
                         }
                     }
                 } header: {
-                    Text("count these apps")
+                    Text("precise mode counts these apps")
                 }
 
                 Section {
@@ -69,7 +77,7 @@ struct SettingsView: View {
                 } header: {
                     Text("privacy")
                 } footer: {
-                    Text("Doomscore reads the screen on-device only to spot swipes, ads and repeats — frames are never saved or uploaded. Strict mode goes further: it only looks while a Shortcuts automation says a reels app is open (needs the auto-start setup).")
+                    Text("Auto mode only receives minutes of use from Screen Time — never screen content. Precise mode reads the screen on-device to spot swipes, ads and repeats; frames are never saved or uploaded. Strict mode makes precise mode look only while a Shortcuts automation says a reels app is open.")
                 }
 
                 battleSection
@@ -124,6 +132,58 @@ struct SettingsView: View {
                 Text("Removes your profile, friends and all synced totals from the server. This can't be undone.")
             }
         }
+    }
+
+    @ViewBuilder
+    private var autoSection: some View {
+        let service = model.screenTime
+        let picked = ScreenTimeSlot.allCases.filter { service.hasApp(for: $0) }.map(\.app.displayName)
+        Section {
+            if service.isAuthorized {
+                Toggle("track automatically", isOn: Binding(
+                    get: { service.enabled },
+                    set: { $0 ? service.enable() : service.disable() }
+                ))
+                NavigationLink {
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            ScreenTimeConnectCard()
+                            Text("Screen Time tracks minutes for the apps you pick here. Pick only the app itself — not a whole category.")
+                                .font(Theme.body(13, weight: .semibold))
+                                .foregroundStyle(Theme.textDim)
+                        }
+                        .padding(20)
+                    }
+                    .screenBackground()
+                    .navigationTitle("tracked apps")
+                } label: {
+                    LabeledContent("apps", value: picked.isEmpty ? "none yet" : picked.joined(separator: " + "))
+                }
+                NavigationLink {
+                    ScrollView { ScrollStylePicker().padding(20) }
+                        .screenBackground()
+                        .navigationTitle("scroll style")
+                } label: {
+                    LabeledContent("scroll style", value: SharedSettings.shared.scrollStyle.title)
+                }
+                LabeledContent("pace", value: String(format: "%.1f reels/min%@", model.pace(for: .instagram), model.isPaceCalibrated ? " · yours" : " · starting guess"))
+                if model.isPaceCalibrated {
+                    Button("forget my measured pace") {
+                        SharedSettings.shared.calibratedPaces = [:]
+                        paceReset.toggle()
+                    }
+                }
+            } else {
+                ScreenTimeConnectCard(showsTikTok: false)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+            }
+        } header: {
+            Text("auto mode (Screen Time)")
+        } footer: {
+            Text("iOS reports how many minutes Instagram/TikTok are open; Doomscore multiplies by your pace. Nothing on your screen is ever seen. Estimates show with ≈.")
+        }
+        .id(paceReset)
     }
 
     @ViewBuilder
@@ -189,7 +249,7 @@ struct DetectorLabView: View {
                     ForEach(d.recentEvents, id: \.self) { Text($0).font(.system(.footnote, design: .monospaced)) }
                 }
             } else {
-                Text("No diagnostics yet. Arm the counter and scroll a few reels.")
+                Text("No diagnostics yet. Start precise mode and scroll a few reels.")
                     .foregroundStyle(Theme.textDim)
             }
         }

@@ -1,7 +1,16 @@
-# Tuning the reel detector
+# Tuning the reel detector (precise mode)
+
+This is about **precise mode** (the optional screen broadcast). Auto mode uses Screen
+Time minutes and needs no tuning beyond the pace, which precise mode calibrates.
 
 The detector ships with sensible defaults, but it reads other apps' UI — expect to tune
 it on real devices, and again whenever Instagram / YouTube / TikTok redesign.
+
+How it avoids the classic over-count: subtitles and meme text burned into videos change
+every second and used to look like a new creator/caption. Only the app's own overlay
+text counts now — small (`zones.maxOverlayTextHeight`) and left-aligned
+(`zones.overlayMaxMinX`). A reel change without a detected swipe also needs a real
+picture cut plus `implicitConfirmations` agreeing readings.
 
 ## 1. Detector lab
 
@@ -36,7 +45,9 @@ host app, start the broadcast, then use Xcode's debugger / Console (subsystem
 | feed scrolls counted | raise `shortVideoScoreThreshold`, add words to `keywords.feedNegative` |
 | ads counted | add the label/CTA text you see to `keywords.adLabels` / `ctaPhrases` |
 | comment scrolling counted | add the sheet's placeholder text to `keywords.comments` |
-| double counts on one reel | raise `implicitChangeCooldown`, check identity in lab |
+| double counts on one reel | raise `implicitConfirmations` (2 → 3) or `implicitChangeCooldown`, check identity in lab |
+| big captions still read as identity | lower `zones.maxOverlayTextHeight` (0.034 → 0.028) |
+| username/caption not read at all | raise `zones.maxOverlayTextHeight` or `zones.overlayMaxMinX` |
 | memory warnings | raise `ocr.downscale` to 3 or `ocr.intervalInReels` |
 
 Ship fixes without an app update: host a partial JSON at `DS_REMOTE_CONFIG_URL`
@@ -44,7 +55,7 @@ Ship fixes without an app update: host a partial JSON at `DS_REMOTE_CONFIG_URL`
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "keywords": { "adLabels": ["sponsored", "ad", "promoted"] },
   "motion": { "minImprovement": 0.33 }
 }

@@ -29,14 +29,20 @@ struct ScreenClassifier: Sendable {
         let z = config.zones
         let k = config.keywords
 
+        // Subtitles and meme text burned into the video are big and change
+        // every second; only the app's small overlay text describes the reel.
+        let overlay = items.filter { $0.box.height <= z.maxOverlayTextHeight }
         let top = items.filter { $0.box.maxY <= z.topMaxY }
-        let rail = items.filter {
+        let rail = overlay.filter {
             $0.box.minX >= z.railMinX && $0.midY >= z.railMinY && $0.midY <= z.railMaxY && $0.normalized.count <= 12
         }
-        let caption = items.filter {
+        // Everything in the caption area, including the Follow button…
+        let captionZone = overlay.filter {
             $0.box.minX <= z.captionMaxMinX && $0.box.maxX <= z.railMinX + 0.06
                 && $0.midY >= z.captionMinY && $0.midY <= z.captionMaxY
         }
+        // …and the left-aligned lines in it: username, caption, audio.
+        let caption = captionZone.filter { $0.box.minX <= z.overlayMaxMinX }
         let tabBar = items.filter { $0.midY > z.tabBarMinY }
 
         // A comment sheet covers the reel: no counting while it's open.
@@ -66,9 +72,13 @@ struct ScreenClassifier: Sendable {
 
         score += min(column, 3)
         if !caption.isEmpty { score += 1 }
-        let hasFollow = caption.contains { item in k.follow.contains { item.normalized == $0 || item.normalized.hasSuffix(" " + $0) } }
-        let hasSubscribe = caption.contains { k.subscribe.contains($0.normalized) }
+        let hasFollow = captionZone.contains { item in k.follow.contains { item.normalized == $0 || item.normalized.hasSuffix(" " + $0) } }
+        let hasSubscribe = captionZone.contains { k.subscribe.contains($0.normalized) }
         if hasFollow || hasSubscribe { score += 1 }
+        let hasAudioLine = caption.contains { item in
+            item.text.hasPrefix("♫") || item.text.hasPrefix("♪") || k.audioLine.contains { item.normalized.contains($0) }
+        }
+        if hasAudioLine { score += 1 }
 
         let looksLikeYouTube = hasSubscribe
             || railLabels.contains { k.youtubeRail.contains($0.normalized) }
@@ -85,15 +95,17 @@ struct ScreenClassifier: Sendable {
         }
 
         // Layout sanity: a vertical action rail or a feed header must exist.
-        let structural = column >= 2 || igHeader || (column >= 1 && (hasFollow || hasSubscribe))
+        let structural = column >= 2 || igHeader
+            || (column >= 1 && (hasFollow || hasSubscribe || hasAudioLine))
+            || ((hasFollow || hasSubscribe) && hasAudioLine)
         let isShortVideo = structural && !caption.isEmpty && score >= config.shortVideoScoreThreshold
 
         guard isShortVideo else {
             return ScreenReading(kind: .other, app: app, isAd: false, identity: nil, score: score, at: time)
         }
 
-        let isAd = detectAd(items: items)
-        let identity = extractIdentity(caption: caption, railCounts: railCounts)
+        let isAd = detectAd(items: overlay)
+        let identity = extractIdentity(caption: caption, anchors: captionZone, railCounts: railCounts)
         return ScreenReading(kind: .shortVideo, app: app, isAd: isAd, identity: identity, score: score, at: time)
     }
 
@@ -102,7 +114,9 @@ struct ScreenClassifier: Sendable {
     func detectAd(items: [TextItem]) -> Bool {
         let z = config.zones
         let k = config.keywords
-        let zone = items.filter { $0.midY >= z.adMinY && $0.box.minX <= 0.85 }
+        let zone = items.filter {
+            $0.midY >= z.adMinY && $0.box.minX <= 0.85 && $0.box.height <= z.maxOverlayTextHeight
+        }
         for item in zone {
             let text = item.normalized
             for label in k.adLabels {
@@ -114,16 +128,20 @@ struct ScreenClassifier: Sendable {
                     return true
                 }
             }
-            if k.ctaPhrases.contains(where: { text.hasPrefix($0) }) { return true }
+            // CTA bars ("Shop now ›") are left-aligned buttons, not words in a subtitle.
+            if item.box.minX <= 0.3, k.ctaPhrases.contains(where: { text.hasPrefix($0) }) { return true }
         }
         return false
     }
 
     // MARK: Identity
 
-    func extractIdentity(caption: [TextItem], railCounts: [TextItem]) -> ReelIdentity? {
+    /// `caption`: left-aligned overlay lines. `anchors`: the whole caption
+    /// area (the Follow/Subscribe button sits right of the username).
+    func extractIdentity(caption: [TextItem], anchors: [TextItem]? = nil, railCounts: [TextItem]) -> ReelIdentity? {
         let k = config.keywords
         let lines = caption.sorted { $0.box.minY < $1.box.minY }
+        let zone = anchors ?? caption
 
         func isNoise(_ text: String) -> Bool {
             k.captionNoise.contains { text == $0 || text.hasPrefix($0 + " ") }
@@ -134,13 +152,13 @@ struct ScreenClassifier: Sendable {
 
         var handle: String?
         // 1) The text immediately left of a Follow/Subscribe button.
-        if let anchor = lines.first(where: { k.follow.contains($0.normalized) || k.subscribe.contains($0.normalized) }) {
-            handle = lines
+        if let anchor = zone.first(where: { k.follow.contains($0.normalized) || k.subscribe.contains($0.normalized) }) {
+            handle = zone
                 .filter { $0 != anchor && abs($0.midY - anchor.midY) < 0.02 && $0.box.maxX <= anchor.box.minX + 0.02 }
                 .max { $0.box.maxX < $1.box.maxX }
                 .flatMap { Self.cleanHandle($0.normalized, noise: isNoise) }
         }
-        // 2) Otherwise the top-most line that looks like a username.
+        // 2) Otherwise the top-most left-aligned line that looks like a username.
         if handle == nil {
             handle = lines.lazy.compactMap { Self.cleanHandle($0.normalized, noise: isNoise) }.first
         }
@@ -149,7 +167,7 @@ struct ScreenClassifier: Sendable {
             let text = item.normalized
             return text.count >= 8 && text.contains(" ") && !isNoise(text)
                 && Self.cleanHandle(text, noise: isNoise) == nil
-                && !text.contains("original audio")
+                && !k.audioLine.contains { text.contains($0) }
         }
         let caption = captionLine.map { String($0.normalized.filter { $0.isLetter || $0.isNumber || $0 == " " }.prefix(28)) }
             .flatMap { $0.isEmpty ? nil : $0 }

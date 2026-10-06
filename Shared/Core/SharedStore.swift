@@ -1,7 +1,7 @@
 import Foundation
 
 /// File-based store in the App Group container, shared by the app, the widget
-/// extension and the broadcast extension. Every access goes through
+/// extension, the Screen Time monitor and the broadcast extension. Every access goes through
 /// `NSFileCoordinator` and writes are atomic, so a process being killed
 /// mid-write can never corrupt history.
 final class SharedStore: @unchecked Sendable {
@@ -15,6 +15,8 @@ final class SharedStore: @unchecked Sendable {
         case detectorConfig = "detector-config.json"
         case diagnostics = "diagnostics.json"
         case seenReels = "seen-reels.json"
+        case screenTime = "screen-time.json"
+        case screenTimeSelections = "screen-time-selections.json"
     }
 
     let directory: URL
@@ -69,6 +71,11 @@ final class SharedStore: @unchecked Sendable {
         }
     }
 
+    /// Cheap change check (no decoding).
+    func modificationDate(of file: File) -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: url(for: file).path))?[.modificationDate] as? Date
+    }
+
     func remove(_ file: File) {
         var coordinationError: NSError?
         NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: url(for: file), options: .forDeleting, error: &coordinationError) { url in
@@ -76,7 +83,8 @@ final class SharedStore: @unchecked Sendable {
         }
     }
 
-    func removeAll() { File.allCases.forEach(remove) }
+    /// Wipes history. The Screen Time app picks survive (they're settings).
+    func removeAll() { File.allCases.filter { $0 != .screenTimeSelections }.forEach(remove) }
 
     // MARK: Convenience
 
@@ -85,10 +93,12 @@ final class SharedStore: @unchecked Sendable {
     var hint: ForegroundHint? { read(ForegroundHint.self, from: .hint) }
     var leaderboard: CachedLeaderboard? { read(CachedLeaderboard.self, from: .leaderboard) }
     var diagnostics: DetectorDiagnostics? { read(DetectorDiagnostics.self, from: .diagnostics) }
+    var screenTime: ScreenTimeState? { read(ScreenTimeState.self, from: .screenTime) }
 
-    /// History with the extension's in-flight "today" merged in. The live file
-    /// is written every few hundred ms while the ledger is flushed less often.
-    func mergedLedger() -> Ledger {
+    /// Exact (precise-mode) history with the broadcast extension's in-flight
+    /// "today" merged in. The live file is written every few hundred ms while
+    /// the ledger is flushed less often.
+    func exactLedger() -> Ledger {
         var ledger = self.ledger
         if let live {
             let key = live.today.day
@@ -101,7 +111,29 @@ final class SharedStore: @unchecked Sendable {
         return ledger
     }
 
-    /// Today's record (empty if nothing counted yet).
+    /// Everything the user sees: exact counts plus Screen Time estimates.
+    func mergedLedger() -> Ledger {
+        var ledger = exactLedger()
+        guard let screenTime else { return ledger }
+        for day in screenTime.days.values {
+            ledger[day.day] = day.merged(into: ledger[day.day] ?? DayRecord(day: day.day))
+        }
+        return ledger
+    }
+
+    /// An exact record with that day's Screen Time estimate added.
+    func effective(_ exact: DayRecord) -> DayRecord {
+        guard let day = screenTime?[exact.day] else { return exact }
+        return day.merged(into: exact)
+    }
+
+    /// Today's exact (precise-mode only) record.
+    func exactTodayRecord(now: Date = Date()) -> DayRecord {
+        let key = DayKey(now)
+        return exactLedger()[key] ?? DayRecord(day: key)
+    }
+
+    /// Today's record as shown to the user (empty if nothing counted yet).
     func todayRecord(now: Date = Date()) -> DayRecord {
         let key = DayKey(now)
         return mergedLedger()[key] ?? DayRecord(day: key)

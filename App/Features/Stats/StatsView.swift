@@ -164,7 +164,7 @@ struct StatsView: View {
                 label: summary.bestDay.map { "highest · \(Fmt.dayTitle($0.day))" } ?? "highest day",
                 tint: Theme.orange
             )
-            StatTile(emoji: "⏱️", value: Fmt.duration(summary.watchSeconds), label: "time in reels")
+            StatTile(emoji: "⏱️", value: Fmt.duration(summary.watchSeconds), label: "time scrolling")
             StatTile(emoji: "🧊", value: "\(summary.longestChillStreak)d", label: "longest chill streak", tint: Theme.cyan)
             StatTile(emoji: "🥷", value: "\(summary.adsSkipped)", label: "ads dodged", tint: Theme.lime)
             StatTile(emoji: "📏", value: String(format: "%.0f m", summary.thumbMeters), label: "of content scrolled", tint: Theme.pink)

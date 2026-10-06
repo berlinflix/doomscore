@@ -8,4 +8,5 @@ enum Log {
     static let detector = Logger(subsystem: subsystem, category: "detector")
     static let sync = Logger(subsystem: subsystem, category: "sync")
     static let activity = Logger(subsystem: subsystem, category: "live-activity")
+    static let screenTime = Logger(subsystem: subsystem, category: "screen-time")
 }

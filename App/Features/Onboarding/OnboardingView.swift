@@ -3,12 +3,11 @@ import SwiftUI
 
 struct OnboardingView: View {
     @Environment(AppModel.self) private var model
-    @Environment(Router.self) private var router
     @State private var page = 0
     @State private var goal = 100.0
     @State private var notificationsGranted = false
 
-    private let pageCount = 5
+    private let pageCount = 6
 
     var body: some View {
         ZStack {
@@ -28,9 +27,10 @@ struct OnboardingView: View {
                 TabView(selection: $page) {
                     welcome.tag(0)
                     howItWorks.tag(1)
-                    capPicker.tag(2)
-                    autoStart.tag(3)
-                    finish.tag(4)
+                    connect.tag(2)
+                    scrollStyle.tag(3)
+                    capPicker.tag(4)
+                    finish.tag(5)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .animation(.spring(response: 0.5, dampingFraction: 0.85), value: page)
@@ -45,7 +45,7 @@ struct OnboardingView: View {
     private var welcome: some View {
         OnboardingPage(
             title: "how cooked are you? 🍳",
-            subtitle: "Doomscore counts every reel you swipe on Instagram, YouTube Shorts & TikTok. no ads. no rewatches. no cap."
+            subtitle: "Doomscore tracks your Instagram & TikTok scrolling automatically. no screen recording. no taps. just vibes (and numbers)."
         ) {
             GoobView(mood: .kindaCooked, size: 200)
         } footer: {
@@ -56,15 +56,54 @@ struct OnboardingView: View {
     private var howItWorks: some View {
         OnboardingPage(
             title: "how it works",
-            subtitle: "iPhone doesn't let apps read other apps, so we use the one thing it allows: screen broadcast — processed on-device, never recorded."
+            subtitle: "iPhone never lets apps see other apps. so we don't even try."
         ) {
             VStack(alignment: .leading, spacing: 16) {
-                bullet("hand.draw.fill", "we detect swipes, not content", "motion + a quick look at the overlay (like the “Sponsored” label)")
-                bullet("lock.shield.fill", "nothing leaves your phone", "no video, no screenshots. only the daily number syncs to battles")
-                bullet("iphone.radiowaves.left.and.right", "you'll see a red pill up top", "that's iOS showing the counter is on. tap it to stop anytime")
+                bullet("hourglass", "Screen Time does the watching", "iOS tells us how long Instagram is open. that's it — we never see your screen")
+                bullet("function", "minutes → reels", "we turn minutes into reels with your scroll pace. it gets sharper the more you use it")
+                bullet("scope", "want it exact? optional", "precise mode counts every single reel and skips ads + rewatches. totally up to you")
             }
         } footer: {
             Button("makes sense") { next() }.buttonStyle(ChunkyButtonStyle())
+        }
+    }
+
+    private var connect: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                Spacer(minLength: 20)
+                GoobView(mood: model.screenTime.isTracking ? .chill : .lowkey, size: 130)
+                VStack(spacing: 10) {
+                    Text("plug into Screen Time")
+                        .font(Theme.display(30))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Theme.text)
+                    Text("one Face ID, then pick Instagram. Doomscore runs in the background from then on — even when the app is closed.")
+                        .font(Theme.body(15, weight: .semibold))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Theme.textDim)
+                }
+                ScreenTimeConnectCard()
+                if model.screenTime.isTracking {
+                    Button("next") { next() }.buttonStyle(ChunkyButtonStyle())
+                } else {
+                    Button("skip for now") { next() }.buttonStyle(GhostButtonStyle())
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 24)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private var scrollStyle: some View {
+        OnboardingPage(
+            title: "be honest 👀",
+            subtitle: "what do you actually do on Instagram? this sets your starting pace — precise mode can fine-tune it later."
+        ) {
+            ScrollStylePicker()
+        } footer: {
+            Button("that's me") { next() }.buttonStyle(ChunkyButtonStyle())
         }
     }
 
@@ -99,22 +138,10 @@ struct OnboardingView: View {
         }
     }
 
-    private var autoStart: some View {
-        VStack(spacing: 0) {
-            AutomationGuideView()
-            HStack(spacing: 10) {
-                Button("later") { next() }.buttonStyle(GhostButtonStyle())
-                Button("done ✅") { next() }.buttonStyle(ChunkyButtonStyle())
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 20)
-        }
-    }
-
     private var finish: some View {
         OnboardingPage(
             title: "last thing",
-            subtitle: "turn on notifications for nudges when the counter's off + your weekly wrapped. Live Activities show your count in the Dynamic Island."
+            subtitle: "notifications = nightly damage report + your weekly wrapped. Live Activities put your count in the Dynamic Island while you scroll."
         ) {
             VStack(spacing: 14) {
                 GoobView(mood: .fresh, size: 150)
@@ -122,7 +149,7 @@ struct OnboardingView: View {
                     .font(Theme.body(15, weight: .heavy))
                     .foregroundStyle(notificationsGranted ? Theme.lime : Theme.textDim)
                 if !ActivityAuthorizationInfo().areActivitiesEnabled {
-                    Text("Live Activities are off for Doomscore — enable them in Settings to see your count in the Dynamic Island.")
+                    Text("Live Activities are off for Doomscore — turn them on in Settings to see your count in the Dynamic Island.")
                         .font(Theme.body(13, weight: .semibold))
                         .foregroundStyle(Theme.textFaint)
                         .multilineTextAlignment(.center)
@@ -136,13 +163,8 @@ struct OnboardingView: View {
                     }
                     .buttonStyle(GhostButtonStyle())
                 }
-                Button("arm the counter 🚀") {
-                    model.completeOnboarding()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                        router.sheet = .arm(auto: false, returnTo: nil)
-                    }
-                }
-                .buttonStyle(ChunkyButtonStyle())
+                Button("let's go 🚀") { model.completeOnboarding() }
+                    .buttonStyle(ChunkyButtonStyle())
             }
         }
         .task { notificationsGranted = await NotificationService.isAuthorized() }

@@ -185,7 +185,7 @@ struct WrappedView: View {
             .padding(.top, 60)
         case .empty:
             StorySlide(kicker: "nothing to wrap yet", title: "clean slate 🧼") {
-                Text("arm the counter and scroll a bit — your recap builds itself.")
+                Text("connect Screen Time and scroll a bit — your recap builds itself.")
                     .font(Theme.body(19, weight: .bold))
                     .multilineTextAlignment(.center)
             }

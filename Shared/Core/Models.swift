@@ -126,6 +126,10 @@ struct DayRecord: Codable, Equatable, Sendable {
     var firstReelAt: Date?
     var lastReelAt: Date?
     var updatedAt: Date = .distantPast
+    /// Part of `total` estimated from Screen Time minutes (auto mode).
+    var estimatedReels: Int = 0
+    /// Minutes the tracked apps were open, per Screen Time.
+    var screenMinutes: Int = 0
 
     init(day: DayKey) { self.day = day }
 
@@ -139,9 +143,12 @@ struct DayRecord: Codable, Equatable, Sendable {
 
     var averageSecondsPerReel: Double? { total > 0 ? watchSeconds / Double(total) : nil }
 
+    /// Whether any of today's number is a Screen Time estimate.
+    var isEstimated: Bool { estimatedReels > 0 }
+
     private enum CodingKeys: String, CodingKey {
         case day, total, perApp, hourly, watchSeconds, watchPerApp, adsSkipped, rewatchesSkipped
-        case sessions, longestSession, firstReelAt, lastReelAt, updatedAt
+        case sessions, longestSession, firstReelAt, lastReelAt, updatedAt, estimatedReels, screenMinutes
     }
 
     // Tolerant decoding so adding fields in future versions never wipes history.
@@ -161,6 +168,8 @@ struct DayRecord: Codable, Equatable, Sendable {
         firstReelAt = try c.decodeIfPresent(Date.self, forKey: .firstReelAt)
         lastReelAt = try c.decodeIfPresent(Date.self, forKey: .lastReelAt)
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? .distantPast
+        estimatedReels = try c.decodeIfPresent(Int.self, forKey: .estimatedReels) ?? 0
+        screenMinutes = try c.decodeIfPresent(Int.self, forKey: .screenMinutes) ?? 0
     }
 }
 

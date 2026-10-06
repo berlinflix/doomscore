@@ -51,7 +51,8 @@ struct CounterProvider: TimelineProvider {
             today: ledger[key] ?? DayRecord(day: key),
             goal: settings.dailyGoal,
             streak: streak.current,
-            armed: store.isArmed(now: date)
+            // Auto mode (Screen Time) or precise mode (broadcast).
+            armed: settings.screenTimeEnabled || store.isArmed(now: date)
         )
     }
 }
@@ -74,8 +75,11 @@ struct CounterWidgetView: View {
     @Environment(\.widgetFamily) private var family
 
     private var tapURL: URL? {
-        URL(string: entry.armed ? "doomscore://today" : "doomscore://arm")
+        URL(string: "doomscore://today")
     }
+
+    /// "≈" when part of the number is a Screen Time estimate.
+    private var approx: String { entry.today.isEstimated ? "≈" : "" }
 
     var body: some View {
         content
@@ -103,12 +107,19 @@ struct CounterWidgetView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("\(entry.today.total)")
-                        .font(Theme.display(40))
-                        .foregroundStyle(Theme.text)
-                        .minimumScaleFactor(0.5)
-                        .lineLimit(1)
-                        .contentTransition(.numericText(value: Double(entry.today.total)))
+                    HStack(alignment: .firstTextBaseline, spacing: 1) {
+                        if entry.today.isEstimated {
+                            Text("≈")
+                                .font(Theme.display(22))
+                                .foregroundStyle(Theme.textFaint)
+                        }
+                        Text("\(entry.today.total)")
+                            .font(Theme.display(40))
+                            .foregroundStyle(Theme.text)
+                            .minimumScaleFactor(0.5)
+                            .lineLimit(1)
+                            .contentTransition(.numericText(value: Double(entry.today.total)))
+                    }
                     Text("reels today")
                         .font(Theme.body(12, weight: .bold))
                         .foregroundStyle(Theme.textDim)
@@ -141,7 +152,7 @@ struct CounterWidgetView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Label(entry.armed ? "counting" : "off", systemImage: entry.armed ? "record.circle.fill" : "record.circle")
+                    Label(entry.armed ? "tracking" : "off", systemImage: entry.armed ? "record.circle.fill" : "record.circle")
                         .font(Theme.body(11, weight: .heavy))
                         .foregroundStyle(entry.armed ? Theme.lime : Theme.textFaint)
                     Spacer()
@@ -169,24 +180,24 @@ struct CounterWidgetView: View {
         Gauge(value: Double(min(entry.today.total, entry.goal)), in: 0...Double(max(entry.goal, 1))) {
             Text("reels")
         } currentValueLabel: {
-            Text(Fmt.compact(entry.today.total))
+            Text(approx + Fmt.compact(entry.today.total))
         }
         .gaugeStyle(.accessoryCircular)
     }
 
     private var rectangular: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text("\(entry.today.total) reels \(entry.mood.emoji)")
+            Text("\(approx)\(entry.today.total) reels \(entry.mood.emoji)")
                 .font(.system(.headline, design: .rounded).weight(.heavy))
             ProgressView(value: Double(min(entry.today.total, entry.goal)), total: Double(max(entry.goal, 1)))
-            Text(entry.armed ? "counting · \(entry.mood.title)" : "\(entry.mood.title) · tap to arm")
+            Text(entry.armed ? "tracking · \(entry.mood.title)" : "\(entry.mood.title) · tap to set up")
                 .font(.system(.caption, design: .rounded))
         }
         .widgetAccentable()
     }
 
     private var inline: some View {
-        Text("\(entry.mood.emoji) \(entry.today.total) reels today")
+        Text("\(entry.mood.emoji) \(approx)\(entry.today.total) reels today")
     }
 }
 

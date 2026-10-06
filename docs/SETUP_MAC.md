@@ -11,6 +11,17 @@
 - **`Config/Base.xcconfig`** already holds the Team ID, bundle IDs, App Group and the
   `doomscore.gridcc.tech` domain. There's nothing to edit before your first build.
 
+### Portal additions for auto mode (Screen Time)
+
+- `com.gridcc.doomscore` → also tick **Family Controls (Development)**.
+- New App ID `com.gridcc.doomscore.activitymonitor` ("Doomscore Screen Time") with
+  **App Groups** (`group.com.gridcc.doomscore`) and **Family Controls (Development)**.
+
+Xcode's automatic signing usually does both by itself on the first ⌘R. If it says a profile
+doesn't include `com.apple.developer.family-controls`, make the changes above in the portal,
+then press **Try Again** in Xcode. TestFlight/App Store builds also need Apple's distribution
+approval (see [APP_REVIEW.md](APP_REVIEW.md)).
+
 ## 1. Set up the Mac (once)
 
 1. Install **Xcode** from the Mac App Store. Open it once and let it install the iOS platform.
@@ -51,9 +62,10 @@ open Doomscore.xcodeproj
 ## 4. Run
 
 1. In Xcode's toolbar, pick the **Doomscore** scheme and your iPhone, then press **⌘R**.
-   Screen broadcasts don't run in the Simulator, so use the phone.
+   Screen Time and screen broadcasts don't run in the Simulator, so use the phone.
 2. If you get a signing error, open each target (Doomscore, DoomscoreWidgets,
-   DoomscoreBroadcast) → Signing & Capabilities → check the Team is "Suyash Singh" → **Try Again**.
+   DoomscoreBroadcast, DoomscoreActivityMonitor) → Signing & Capabilities → check the Team is
+   "Suyash Singh" → **Try Again**.
 3. If the build fails in `App/Intents/ForegroundContinuation.swift`:
    - Create `Config/Secrets.xcconfig` containing `DS_SWIFT_FLAGS =`.
    - Run `xcodegen generate` again.
@@ -62,22 +74,29 @@ open Doomscore.xcodeproj
 
 ## 5. Try it
 
-1. Onboarding → set your daily cap → allow notifications.
-2. **Arm the counter** → Doomscore appears in the system sheet → **Start Broadcast**. A red pill shows up.
-3. Instagram → Reels → scroll about 10 reels → back to Doomscore. The count should match.
-4. iPhone Settings → Doomscore → Live Activities On → **More Frequent Updates** On.
-5. Widgets: long-press the Home Screen → Edit → Add Widget → Doomscore.
-   Control Center: swipe down → **+** → Add a Control → **Count Reels**.
-6. If counts look off: Settings (gear) → advanced → detector diagnostics → open detector lab.
+1. Onboarding → **connect Screen Time** (Face ID) → pick **Instagram** in the picker →
+   pick your scroll style → set your daily cap → allow notifications.
+2. iPhone Settings → Doomscore → Live Activities On → **More Frequent Updates** On.
+3. Scroll Instagram for 2–3 minutes. Each minute, the count in Doomscore, the widget and the
+   Dynamic Island goes up (≈ = estimate). The island appears after the first minute; it
+   needs a battle profile (device token) for live updates.
+4. Widgets: long-press the Home Screen → Edit → Add Widget → Doomscore.
+   Control Center: swipe down → **+** → Add a Control → **Count Reels** (precise mode).
+5. Optional **precise mode** (exact count, skips ads + rewatches): Home → precise mode →
+   **Start Broadcast**. A red pill shows up. Each session also teaches auto mode your pace.
+6. If precise counts look off: Settings (gear) → advanced → detector diagnostics → open detector lab.
 
-## 6. Auto-start when Instagram opens
+## 6. Optional: instant island when Instagram opens
+
+Auto mode already counts without this. The automation makes the Dynamic Island appear the
+second you open Instagram (instead of after a minute) and close when you leave.
 
 1. Open Doomscore once first, so its actions show up in Shortcuts.
 2. Shortcuts → **Automation** → **+** → **App** → pick **Instagram**, keep **Is Opened** →
    **Run Immediately** → turn off **Notify When Run** → Next.
 3. **New Blank Automation** → Add Action → search **Doomscore** → **Reels App Opened** → App = Instagram → Done.
-4. Optional: add a second automation with **Is Closed** → **Reels App Closed**.
-5. Repeat for YouTube or TikTok if you want them counted.
+4. Recommended: a second automation with **Is Closed** → **Reels App Closed**.
+5. Repeat for TikTok if you track it.
 
 ## 7. Website: doomscore.gridcc.tech (invite links + privacy policy)
 
@@ -118,8 +137,10 @@ and never commit it. If you ever lose it, create a new APNs key and replace both
 
 ## 9. Debugging and tests
 
-- **Reel detector:** pick the **DoomscoreBroadcast** scheme → Run → choose Doomscore → start a broadcast.
-  Logs are in Console.app (subsystem `app.doomscore`).
+- **Screen Time monitor:** pick the **DoomscoreActivityMonitor** scheme → Run → choose Doomscore,
+  then use Instagram. Logs are in Console.app (subsystem `app.doomscore`, category `screen-time`).
+- **Reel detector (precise mode):** pick the **DoomscoreBroadcast** scheme → Run → choose Doomscore →
+  start a broadcast. Logs are in Console.app (subsystem `app.doomscore`).
 - **Unit tests:** pick any iPhone Simulator → **⌘U**.
 
 ## 10. TestFlight / App Store (later)
@@ -137,6 +158,8 @@ and never commit it. If you ever lose it, create a new APNs key and replace both
 | "No Account for Team" | Xcode → Settings → Accounts → sign in, then pick the team in each target |
 | Profile missing an entitlement | Developer portal → Identifiers → the App ID → enable that capability → Xcode **Try Again** |
 | Doomscore missing from the Start Broadcast sheet | Fix DoomscoreBroadcast signing, delete the app from the phone, run again |
-| Count stays at 0 | Detector lab; also Settings → "count these apps" |
+| Count stays at 0 (auto mode) | Settings → auto mode: Screen Time connected, Instagram picked, "track automatically" on. Use Instagram for a full minute |
+| Count stays at 0 (precise mode) | Detector lab; also Settings → "precise mode counts these apps" |
+| Dynamic Island doesn't update by itself | Join battles once (creates the device token), and turn on More Frequent Updates |
 | Doomscore actions missing in Shortcuts | Open the app once, then force-quit and reopen Shortcuts |
 | Invite links open Safari instead of the app | Check Apple's CDN URL from step 7 shows the JSON, then reinstall the app (iOS fetches the file at install time) |

@@ -1,8 +1,10 @@
 // POST /functions/v1/ingest — single-file Edge Function (paste-able into the Supabase dashboard).
-// Called by the broadcast extension (every few seconds while counting) and by the app
-// (catch-up sync). Auth: scoped device token in the `x-device-token` header.
+// Called by the Screen Time monitor (each minute of use), the broadcast extension (every
+// few seconds while precise mode counts) and the app (catch-up sync).
+// Auth: scoped device token in the `x-device-token` header.
 // Body: { day, tzOffsetMinutes, apps: [{app, reels, watchSeconds, adsSkipped}],
-//         live?: {todayCount, sessionCount, goal, armed, appName, sessionStarted},
+//         live?: {todayCount, sessionCount, goal, armed, appName, sessionStarted,
+//                 estimated?, sessionStart?, streak?, ended?},
 //         clientTime, appVersion }
 // Secrets (optional, for Dynamic Island updates): APNS_KEY_ID, APNS_TEAM_ID,
 // APNS_PRIVATE_KEY (.p8 contents), APNS_BUNDLE_ID.
@@ -129,6 +131,18 @@ interface Live {
   armed: boolean;
   appName: string;
   sessionStarted: boolean;
+  /** Counts include Screen Time estimates (auto mode). */
+  estimated: boolean;
+  /** Unix seconds the visit started (drives the island's live timer). */
+  sessionStart: number | null;
+  streak: number;
+  /** The visit is over: end the Live Activity. */
+  ended: boolean;
+}
+
+function optionalBool(value: unknown): boolean | null {
+  if (value === undefined || value === null) return false;
+  return typeof value === "boolean" ? value : null;
 }
 
 function parse(body: unknown): { day: string; apps: AppTotal[]; live?: Live } | string {
@@ -151,6 +165,16 @@ function parse(body: unknown): { day: string; apps: AppTotal[]; live?: Live } | 
       !isRecord(l) || !isInt(l.todayCount, 0, 100000) || !isInt(l.sessionCount, 0, 100000) || !isInt(l.goal, 1, 5000) ||
       typeof l.armed !== "boolean" || typeof l.appName !== "string" || typeof l.sessionStarted !== "boolean"
     ) return "bad_live";
+    const estimated = optionalBool(l.estimated);
+    const ended = optionalBool(l.ended);
+    if (estimated === null || ended === null) return "bad_live";
+    if (l.streak !== undefined && l.streak !== null && !isInt(l.streak, 0, 100000)) return "bad_live";
+    let sessionStart: number | null = null;
+    if (typeof l.sessionStart === "number" && Number.isFinite(l.sessionStart)) {
+      const nowSec = Date.now() / 1000;
+      // Ignore clocks that are way off rather than rejecting the upload.
+      if (l.sessionStart > nowSec - 2 * 86400 && l.sessionStart < nowSec + 300) sessionStart = Math.floor(l.sessionStart);
+    }
     live = {
       todayCount: l.todayCount,
       sessionCount: l.sessionCount,
@@ -158,6 +182,10 @@ function parse(body: unknown): { day: string; apps: AppTotal[]; live?: Live } | 
       armed: l.armed,
       appName: (l.appName as string).slice(0, 24),
       sessionStarted: l.sessionStarted,
+      estimated,
+      sessionStart,
+      streak: typeof l.streak === "number" ? l.streak : 0,
+      ended,
     };
   }
   return { day, apps, live };
@@ -188,6 +216,7 @@ Deno.serve(async (req) => {
   const parsed = parse(body);
   if (typeof parsed === "string") return json({ error: parsed }, 400);
 
+  let rateLimited = false;
   if (parsed.apps.length > 0) {
     const { data, error } = await admin.rpc("ingest_stats", {
       p_user: userId,
@@ -200,7 +229,12 @@ Deno.serve(async (req) => {
       return json({ error: "server_error" }, 500);
     }
     if (isRecord(data) && data.ok === false) {
-      return json(data, data.error === "rate_limited" ? 429 : 400);
+      // A visit starting or ending still reaches the Dynamic Island.
+      const transition = parsed.live && (parsed.live.sessionStarted || parsed.live.ended);
+      if (data.error !== "rate_limited" || !transition) {
+        return json(data, data.error === "rate_limited" ? 429 : 400);
+      }
+      rateLimited = true;
     }
   }
 
@@ -211,10 +245,26 @@ Deno.serve(async (req) => {
       console.error("apns", e);
     }
   }
-  return json({ ok: true });
+  return rateLimited ? json({ ok: false, error: "rate_limited" }, 429) : json({ ok: true });
 });
 
-/** Pushes the new count to the user's Live Activity (or starts one). */
+interface UpdateTokenRow {
+  token: string;
+  apns_env: string;
+  updated_at: string;
+  last_push_at: string | null;
+  last_high_priority_at: string | null;
+}
+
+/** Ends a Live Activity and forgets its token. */
+async function endActivity(row: { token: string; apns_env: string }, contentState: Record<string, unknown>, now: number, dismissIn: number) {
+  await sendLiveActivityPush(row.token, row.apns_env, {
+    aps: { timestamp: now, event: "end", "content-state": contentState, "dismissal-date": now + dismissIn },
+  }, 10);
+  await admin.from("live_activity_tokens").delete().eq("token", row.token);
+}
+
+/** Pushes the new count to the user's Live Activity (or starts / ends one). */
 async function mirrorToLiveActivity(userId: string, live: Live) {
   const now = Math.floor(Date.now() / 1000);
   const contentState = {
@@ -224,24 +274,45 @@ async function mirrorToLiveActivity(userId: string, live: Live) {
     armed: live.armed,
     appName: live.appName,
     updatedAt: now,
+    estimated: live.estimated,
+    sessionStart: live.sessionStart ?? 0,
+    streak: live.streak,
   };
+  // Auto mode reports every minute of use; a few quiet minutes = paused.
+  const staleDate = now + (live.estimated ? 240 : 1800);
 
   const since = new Date(Date.now() - 8 * 3600 * 1000).toISOString();
-  const { data: updateTokens } = await admin
+  const { data } = await admin
     .from("live_activity_tokens")
-    .select("token, apns_env, last_push_at, last_high_priority_at")
+    .select("token, apns_env, updated_at, last_push_at, last_high_priority_at")
     .eq("user_id", userId)
     .eq("kind", "update")
     .gte("updated_at", since);
+  let updateTokens = (data ?? []) as UpdateTokenRow[];
 
-  if (updateTokens && updateTokens.length > 0) {
+  // The visit is over: end the activity, keep the final count on the Lock Screen briefly.
+  if (live.ended) {
+    for (const row of updateTokens) await endActivity(row, contentState, now, 120);
+    return;
+  }
+
+  // A new auto-mode visit: retire activities left over from earlier visits
+  // (ones registered before this visit began), then start a fresh one below.
+  if (live.sessionStarted && live.estimated) {
+    const cutoff = (live.sessionStart ?? now) - 60;
+    const old = updateTokens.filter((row) => Date.parse(row.updated_at) / 1000 < cutoff);
+    for (const row of old) await endActivity(row, contentState, now, 0);
+    updateTokens = updateTokens.filter((row) => !old.includes(row));
+  }
+
+  if (updateTokens.length > 0) {
     for (const row of updateTokens) {
       const lastHigh = row.last_high_priority_at ? Date.parse(row.last_high_priority_at) / 1000 : 0;
       // High priority at most every ~20 s; the rest go out as low priority to
       // stay inside Apple's Live Activity update budget.
       const priority: 5 | 10 = now - lastHigh > 20 || !live.armed ? 10 : 5;
       const result = await sendLiveActivityPush(row.token, row.apns_env, {
-        aps: { timestamp: now, event: "update", "content-state": contentState, "stale-date": now + 1800 },
+        aps: { timestamp: now, event: "update", "content-state": contentState, "stale-date": staleDate },
       }, priority);
       if (isDeadToken(result)) {
         await admin.from("live_activity_tokens").delete().eq("token", row.token);
@@ -258,7 +329,7 @@ async function mirrorToLiveActivity(userId: string, live: Live) {
   }
 
   // No running activity: start one remotely (iOS 17.2+ push-to-start), at most
-  // once per 10 minutes, only when a scrolling session begins.
+  // once per 5 minutes, only when a scrolling session begins.
   if (!live.sessionStarted || !live.armed) return;
   const { data: startTokens } = await admin
     .from("live_activity_tokens")
@@ -267,16 +338,19 @@ async function mirrorToLiveActivity(userId: string, live: Live) {
     .eq("kind", "start");
   for (const row of startTokens ?? []) {
     const last = row.last_push_at ? Date.parse(row.last_push_at) / 1000 : 0;
-    if (now - last < 600) continue;
+    if (now - last < 300) continue;
     const result = await sendLiveActivityPush(row.token, row.apns_env, {
       aps: {
         timestamp: now,
         event: "start",
         "content-state": contentState,
         "attributes-type": "DoomActivityAttributes",
-        attributes: { sessionStartEpoch: now },
-        "stale-date": now + 1800,
-        alert: { title: "counting your reels 👀", body: `${live.todayCount} today · ${live.appName}` },
+        attributes: { sessionStartEpoch: live.sessionStart ?? now },
+        "stale-date": staleDate,
+        alert: {
+          title: live.estimated ? "tracking your scroll 👀" : "counting your reels 👀",
+          body: `${live.estimated ? "≈" : ""}${live.todayCount} today · ${live.appName}`,
+        },
       },
     }, 10);
     if (isDeadToken(result)) {
