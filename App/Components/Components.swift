@@ -102,7 +102,7 @@ struct StatusPill: View {
         switch mode {
         case .off: "not tracking"
         case .auto: "auto"
-        case .precise: "precise"
+        case .precise: "exact"
         }
     }
 

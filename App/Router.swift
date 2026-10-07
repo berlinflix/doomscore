@@ -14,6 +14,7 @@ final class Router {
         case arm(auto: Bool, returnTo: SourceApp?)
         case settings
         case setupGuide
+        case paceTest
         case joinBattle
         case invite(code: String)
 
@@ -22,6 +23,7 @@ final class Router {
             case .arm: "arm"
             case .settings: "settings"
             case .setupGuide: "setup"
+            case .paceTest: "pace"
             case .joinBattle: "join"
             case .invite(let code): "invite-\(code)"
             }
@@ -39,13 +41,15 @@ final class Router {
     var wrapped: WrappedRequest?
     var showOnboarding = false
 
-    /// Route strings stored by extensions/notifications, e.g. "arm?auto=1".
+    /// Route strings stored by our own extensions/notifications, e.g. "arm?auto=1".
     func open(route: String) {
-        if let url = URL(string: "\(AppEnvironment.urlScheme)://\(route)") { handle(url: url) }
+        if let url = URL(string: "\(AppEnvironment.urlScheme)://\(route)") { handle(url: url, fromOutside: false) }
     }
 
+    /// `fromOutside`: links from other apps or websites. Those can open
+    /// screens but never auto-start anything (e.g. the broadcast prompt).
     @discardableResult
-    func handle(url: URL) -> Bool {
+    func handle(url: URL, fromOutside: Bool = true) -> Bool {
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         var query: [String: String] = [:]
         for item in components?.queryItems ?? [] { query[item.name] = item.value ?? "" }
@@ -59,7 +63,7 @@ final class Router {
         switch first {
         case "arm":
             let returnTo = query["return"].flatMap(SourceApp.init(rawValue:))
-            sheet = .arm(auto: query["auto"] == "1", returnTo: returnTo)
+            sheet = .arm(auto: !fromOutside && query["auto"] == "1", returnTo: returnTo)
         case "today":
             tab = .today
         case "battle":

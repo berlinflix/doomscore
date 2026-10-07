@@ -180,6 +180,35 @@ final class ScreenTimeEstimatorTests: XCTestCase {
         XCTAssertNil(ScreenTimeLadder.parse("ig"))
     }
 
+    func testOldDaysAreArchivedSoTheExtensionStaysSmall() {
+        var state = ScreenTimeState()
+        for day in 3...7 { apply(1, at: date(10, 1, day: day), to: &state) }
+        let archived = ScreenTimeEstimator.archiveOldDays(in: &state, today: key(day: 7), calendar: calendar)
+        XCTAssertEqual(archived.map(\.day), [key(day: 3), key(day: 4), key(day: 5)])
+        XCTAssertEqual(Set(state.days.keys), [key(day: 6).rawValue, key(day: 7).rawValue])
+    }
+
+    func testPaceTestMath() {
+        // 20 reels in 3:03 (incl. 3 s of app switching) → 6.67 per minute.
+        XCTAssertEqual(PaceTest.reelSpeed(reels: 20, elapsed: 183) ?? 0, 6.667, accuracy: 0.01)
+        XCTAssertNil(PaceTest.reelSpeed(reels: 20, elapsed: 10), "too short to be real")
+        XCTAssertNil(PaceTest.reelSpeed(reels: 200, elapsed: 60), "200 reels a minute isn't possible")
+        XCTAssertNil(PaceTest.reelSpeed(reels: 3, elapsed: 120), "too few reels to measure")
+    }
+
+    func testPaceCombinesSwipeSpeedAndScrollStyle() {
+        XCTAssertEqual(ScreenTimeSlot.instagram.defaultPace(style: .mixed, reelSpeed: nil), 3.5, accuracy: 0.001)
+        XCTAssertEqual(ScreenTimeSlot.instagram.defaultPace(style: .mixed, reelSpeed: 8), 5.6, accuracy: 0.001)
+        XCTAssertEqual(ScreenTimeSlot.tiktok.defaultPace(style: .mostlyChats, reelSpeed: 8), 8, accuracy: 0.001)
+        XCTAssertEqual(ScreenTimeSlot.instagram.defaultPace(style: .reelsOnly, reelSpeed: 99), 20, accuracy: 0.001, "clamped")
+    }
+
+    func testThresholdComponentsHaveNoZeroHour() {
+        XCTAssertEqual(ScreenTimeLadder.dateComponents(minutes: 5), DateComponents(minute: 5))
+        XCTAssertEqual(ScreenTimeLadder.dateComponents(minutes: 125), DateComponents(hour: 2, minute: 5))
+        XCTAssertEqual(ScreenTimeLadder.thresholds.count, 118)
+    }
+
     func testStateDecodesFromOlderJSON() throws {
         let json = #"{"days":{"2026-10-06":{"day":"2026-10-06","minutes":{"instagram":3}}}}"#
         let state = try JSONCoding.decoder.decode(ScreenTimeState.self, from: Data(json.utf8))

@@ -15,6 +15,45 @@ final class SharedSettings: @unchecked Sendable {
         case nudgesEnabled, lastNudgeAt, strictPrivacyMode, diagnosticsEnabled, pendingRoute
         case identitySalt, deviceRegisteredAt, closeAutomationSeenAt
         case screenTimeEnabled, scrollStyle, calibratedPaces, preciseAutoPrompt, screenTimeWidgetReloadAt
+        case reelSpeed, cachedStreak, recapsEnabled
+        case monitorCallbacks, monitorLastCallbackAt, monitorLastEvent, monitorLastOutcome
+    }
+
+    /// Reels per minute while swiping, measured by the pace test.
+    var reelSpeed: Double? {
+        get { defaults.object(forKey: Key.reelSpeed.rawValue) as? Double }
+        set { defaults.set(newValue, forKey: Key.reelSpeed.rawValue) }
+    }
+
+    /// Current chill streak, cached by the app so the Screen Time extension
+    /// never has to load the whole history.
+    var cachedStreak: Int {
+        get { defaults.integer(forKey: Key.cachedStreak.rawValue) }
+        set { defaults.set(newValue, forKey: Key.cachedStreak.rawValue) }
+    }
+
+    /// Nightly damage report + weekly recap notifications.
+    var recapsEnabled: Bool {
+        get { defaults.object(forKey: Key.recapsEnabled.rawValue) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Key.recapsEnabled.rawValue) }
+    }
+
+    // MARK: Screen Time diagnostics (written by the monitor extension)
+
+    var monitorCallbacks: Int { defaults.integer(forKey: Key.monitorCallbacks.rawValue) }
+    var monitorLastCallbackAt: Date? { defaults.object(forKey: Key.monitorLastCallbackAt.rawValue) as? Date }
+    var monitorLastEvent: String? { defaults.string(forKey: Key.monitorLastEvent.rawValue) }
+    var monitorLastOutcome: String? { defaults.string(forKey: Key.monitorLastOutcome.rawValue) }
+
+    /// Cheap heartbeat at the very start of every Screen Time callback.
+    func noteMonitorCallback(_ event: String, at date: Date) {
+        defaults.set(monitorCallbacks + 1, forKey: Key.monitorCallbacks.rawValue)
+        defaults.set(date, forKey: Key.monitorLastCallbackAt.rawValue)
+        defaults.set(event, forKey: Key.monitorLastEvent.rawValue)
+    }
+
+    func noteMonitorOutcome(_ outcome: String) {
+        defaults.set(outcome, forKey: Key.monitorLastOutcome.rawValue)
     }
 
     // MARK: Auto mode (Screen Time)
@@ -36,9 +75,11 @@ final class SharedSettings: @unchecked Sendable {
         set { defaults.set(newValue, forKey: Key.calibratedPaces.rawValue) }
     }
 
-    /// Reels per minute used to turn Screen Time minutes into reels.
+    /// Reels per minute of app time, used to turn Screen Time minutes into
+    /// reels. A pace measured by exact mode wins; otherwise the pace test's
+    /// swipe speed × the scroll-style share.
     func pace(for slot: ScreenTimeSlot) -> Double {
-        calibratedPaces[slot.app.rawValue] ?? slot.defaultPace(style: scrollStyle)
+        calibratedPaces[slot.app.rawValue] ?? slot.defaultPace(style: scrollStyle, reelSpeed: reelSpeed)
     }
 
     /// Opt-in: when a reels app opens, also offer precise mode (screen broadcast).

@@ -72,14 +72,15 @@ targets:
         DSSupabaseURL: $(DS_SUPABASE_URL)
         DSSupabaseAnonKey: $(DS_SUPABASE_ANON_KEY)
         DSInviteBaseURL: $(DS_INVITE_BASE_URL)
+        DSPrivacyPolicyURL: https://$(DS_ASSOCIATED_DOMAIN)/privacy/
         DSRemoteConfigURL: $(DS_REMOTE_CONFIG_URL)
+        NSPhotoLibraryAddUsageDescription: Save your Doomscore recap card to Photos.
     entitlements:
       path: App/Doomscore.entitlements
       properties:
         com.apple.security.application-groups: [$(DS_APP_GROUP_ID)]
         com.apple.developer.applesignin: [Default]
         aps-environment: development
-        com.apple.developer.usernotifications.time-sensitive: true
         com.apple.developer.associated-domains: [applinks:$(DS_ASSOCIATED_DOMAIN)]
         com.apple.developer.family-controls: true
     settings:

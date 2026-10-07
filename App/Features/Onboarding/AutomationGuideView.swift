@@ -61,10 +61,10 @@ struct AutomationGuideView: View {
 
                 Card {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("pro tip: precise mode from Control Center 🎛️")
+                        Text("pro tip: Control Center 🎛️")
                             .font(Theme.body(15, weight: .heavy))
                             .foregroundStyle(Theme.text)
-                        Text("Add the “Count Reels” control, or long-press Screen Recording → pick Doomscore → Start Broadcast. Starts precise mode without opening the app.")
+                        Text("Add the “How Cooked Am I” control to check today's count in one tap.")
                             .font(Theme.body(13, weight: .semibold))
                             .foregroundStyle(Theme.textDim)
                     }

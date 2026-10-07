@@ -12,7 +12,12 @@ struct GoobView: View {
     var body: some View {
         if animated {
             TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+                // One Metal pass per frame for the blob, glow and face; the
+                // padding keeps the glow from being clipped.
                 GoobBody(mood: mood, size: size, time: timeline.date.timeIntervalSinceReferenceDate)
+                    .padding(size * 0.25)
+                    .drawingGroup()
+                    .padding(-size * 0.25)
             }
             .accessibilityElement()
             .accessibilityLabel("Goob looks \(mood.title)")

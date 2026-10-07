@@ -30,15 +30,20 @@ enum ScreenTimeSlot: String, Codable, CaseIterable, Sendable, Identifiable {
         }
     }
 
-    /// Reels per minute of app time before precise mode has calibrated it.
-    func defaultPace(style: ScrollStyle) -> Double {
+    /// Reels per minute of app time: how fast you swipe through reels
+    /// (`reelSpeed`, measured by the pace test) × how much of the app's time
+    /// is spent in reels at all (scroll style).
+    func defaultPace(style: ScrollStyle, reelSpeed: Double?) -> Double {
+        let speed = min(max(reelSpeed ?? ScrollStyle.typicalReelSpeed, Self.reelSpeedRange.lowerBound), Self.reelSpeedRange.upperBound)
         switch self {
-        case .instagram: style.instagramPace
-        case .tiktok: 5.0
+        case .instagram: return speed * style.reelShare
+        case .tiktok: return speed
         }
     }
 
     static let paceRange: ClosedRange<Double> = 0.5...15
+    /// Plausible reels per minute while actually swiping reels.
+    static let reelSpeedRange: ClosedRange<Double> = 1...20
 }
 
 /// Onboarding quiz answer: how much of someone's Instagram time is reels.
@@ -63,12 +68,35 @@ enum ScrollStyle: String, Codable, CaseIterable, Sendable, Identifiable {
         }
     }
 
-    var instagramPace: Double {
+    /// Share of Instagram time spent in Reels.
+    var reelShare: Double {
         switch self {
-        case .reelsOnly: 5.0
-        case .mixed: 3.5
-        case .mostlyChats: 1.5
+        case .reelsOnly: 1.0
+        case .mixed: 0.7
+        case .mostlyChats: 0.3
         }
+    }
+
+    /// Reels per minute while swiping, before the pace test measures yours.
+    static let typicalReelSpeed = 5.0
+
+    var instagramPace: Double { Self.typicalReelSpeed * reelShare }
+}
+
+// MARK: - Pace test (calibration without screen recording)
+
+enum PaceTest {
+    /// Seconds lost to switching apps on the way out and back.
+    static let switchOverhead: TimeInterval = 3
+
+    /// Reels per minute from "I scrolled `reels` reels in `elapsed` seconds",
+    /// or nil when the numbers can't be right.
+    static func reelSpeed(reels: Int, elapsed: TimeInterval) -> Double? {
+        let seconds = elapsed - switchOverhead
+        guard reels >= 5, seconds >= 15, seconds <= 30 * 60 else { return nil }
+        let speed = Double(reels) / (seconds / 60)
+        guard ScreenTimeSlot.reelSpeedRange.contains(speed) else { return nil }
+        return speed
     }
 }
 
@@ -76,17 +104,24 @@ enum ScrollStyle: String, Codable, CaseIterable, Sendable, Identifiable {
 
 enum ScreenTimeLadder {
     /// Bump when the thresholds change so the app re-registers monitoring.
-    static let version = 1
+    static let version = 2
 
     /// Minutes of use at which Screen Time wakes the monitor extension:
-    /// every minute for the first hour, then gradually coarser.
+    /// every minute for the first 20, then gradually coarser (118 events —
+    /// very long ladders have been reported to stall monitoring).
     static let thresholds: [Int] = {
-        var minutes = Array(1...60)
-        minutes += stride(from: 62, through: 180, by: 2)
-        minutes += stride(from: 185, through: 480, by: 5)
-        minutes += stride(from: 490, through: 960, by: 10)
+        var minutes = Array(1...20)
+        minutes += stride(from: 22, through: 60, by: 2)
+        minutes += stride(from: 65, through: 180, by: 5)
+        minutes += stride(from: 190, through: 480, by: 10)
+        minutes += stride(from: 500, through: 960, by: 20)
         return minutes
     }()
+
+    /// Threshold as Screen Time expects it (no zero hour component).
+    static func dateComponents(minutes: Int) -> DateComponents {
+        minutes < 60 ? DateComponents(minute: minutes) : DateComponents(hour: minutes / 60, minute: minutes % 60)
+    }
 
     static let watchdogActivity = "doomscore.watchdog"
 
@@ -346,6 +381,16 @@ enum ScreenTimeEstimator {
         guard ScreenTimeSlot.paceRange.contains(measured) else { return nil }
         guard let previous else { return measured }
         return previous * 0.6 + measured * 0.4
+    }
+
+    /// Removes days older than yesterday so the monitor extension (6 MB
+    /// memory limit) only ever decodes a tiny file. Returns them for the
+    /// append-only history file.
+    static func archiveOldDays(in state: inout ScreenTimeState, today: DayKey, calendar: Calendar = .current) -> [ScreenTimeDay] {
+        let cutoff = today.adding(days: -1, calendar: calendar)
+        let old = state.days.values.filter { $0.day < cutoff }.sorted { $0.day < $1.day }
+        for day in old { state.days[day.day.rawValue] = nil }
+        return old
     }
 
     private static func notePremature(at now: Date, in state: inout ScreenTimeState) {

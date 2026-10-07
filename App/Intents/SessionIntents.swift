@@ -21,9 +21,9 @@ enum ReelsAppOption: String, AppEnum {
 ///  2. pops the Dynamic Island counter up instantly (a LiveActivityIntent may
 ///     start Live Activities from the background) — without the automation
 ///     it appears after the first minute, via push,
-///  3. only when nothing is tracking (or the user opted into precise-mode
-///     prompts): on iOS 26+ it brings Doomscore forward on the one-tap arm
-///     screen; on older iOS it sends a "tap to count" nudge.
+///  3. if nothing is tracking: a quiet "connect Screen Time" reminder. Exact
+///     mode (screen broadcast) is only offered to people who switched that
+///     on in Settings → exact mode.
 struct ReelsAppOpenedIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Reels App Opened"
     static var description = IntentDescription("Use in a Shortcuts automation when a reels app opens. Doomscore shows your live count in the Dynamic Island right away.")
@@ -61,7 +61,14 @@ struct ReelsAppOpenedIntent: LiveActivityIntent {
         let auto = screenTime.isTracking && ScreenTimeSlot.allCases.contains { $0.app == source && screenTime.hasApp(for: $0) }
         await LiveActivityService.shared.showCounting(app: source, armed: precise || auto)
         await LiveActivityService.shared.waitForTokenRegistration()
-        if precise || (auto && !settings.preciseAutoPrompt) { return .result() }
+        if precise { return .result() }
+
+        // Exact mode (screen broadcast) is only ever offered to people who
+        // switched it on in Settings → exact mode.
+        guard settings.preciseAutoPrompt else {
+            if !auto { await NotificationService.sendTrackingNudge(for: source) }
+            return .result()
+        }
 
         #if DS_INTENT_MODES && compiler(>=6.2)
         if #available(iOS 26.0, *) {
@@ -69,7 +76,7 @@ struct ReelsAppOpenedIntent: LiveActivityIntent {
         }
         #endif
 
-        await NotificationService.sendArmNudge(for: source)
+        await NotificationService.sendExactModeNudge(for: source)
         return .result()
     }
 }

@@ -61,7 +61,7 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 16) {
                 bullet("hourglass", "Screen Time does the watching", "iOS tells us how long Instagram is open. that's it — we never see your screen")
                 bullet("function", "minutes → reels", "we turn minutes into reels with your scroll pace. it gets sharper the more you use it")
-                bullet("scope", "want it exact? optional", "precise mode counts every single reel and skips ads + rewatches. totally up to you")
+                bullet("stopwatch", "dial it in", "a 30-sec pace test learns how fast you swipe — still zero screen recording")
             }
         } footer: {
             Button("makes sense") { next() }.buttonStyle(ChunkyButtonStyle())
@@ -99,7 +99,7 @@ struct OnboardingView: View {
     private var scrollStyle: some View {
         OnboardingPage(
             title: "be honest 👀",
-            subtitle: "what do you actually do on Instagram? this sets your starting pace — precise mode can fine-tune it later."
+            subtitle: "what do you actually do on Instagram? this sets your starting pace — the pace test can fine-tune it later."
         ) {
             ScrollStylePicker()
         } footer: {
@@ -141,7 +141,7 @@ struct OnboardingView: View {
     private var finish: some View {
         OnboardingPage(
             title: "last thing",
-            subtitle: "notifications = nightly damage report + your weekly wrapped. Live Activities put your count in the Dynamic Island while you scroll."
+            subtitle: "notifications = nightly damage report + your weekly recap. Live Activities put your count in the Dynamic Island while you scroll."
         ) {
             VStack(spacing: 14) {
                 GoobView(mood: .fresh, size: 150)

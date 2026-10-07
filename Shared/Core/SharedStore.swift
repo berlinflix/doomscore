@@ -1,9 +1,11 @@
 import Foundation
 
 /// File-based store in the App Group container, shared by the app, the widget
-/// extension, the Screen Time monitor and the broadcast extension. Every access goes through
-/// `NSFileCoordinator` and writes are atomic, so a process being killed
-/// mid-write can never corrupt history.
+/// extension, the Screen Time monitor and the broadcast extension. Writes are
+/// atomic (temp file + rename) and go through `NSFileCoordinator`, so a
+/// process killed mid-write can never corrupt history. Reads skip the
+/// coordinator: an atomic rename means a reader always sees a whole file, and
+/// coordinated reads could stall the main thread behind another process's write.
 final class SharedStore: @unchecked Sendable {
     static let shared = SharedStore()
 
@@ -16,19 +18,26 @@ final class SharedStore: @unchecked Sendable {
         case diagnostics = "diagnostics.json"
         case seenReels = "seen-reels.json"
         case screenTime = "screen-time.json"
+        case screenTimeHistory = "screen-time-history.jsonl"
         case screenTimeSelections = "screen-time-selections.json"
     }
 
     let directory: URL
+    /// False when the App Group entitlement is missing (data then can't be
+    /// shared between the app and its extensions).
+    let isSharedContainer: Bool
 
     init(directory: URL? = nil) {
         if let directory {
             self.directory = directory
+            isSharedContainer = true
         } else if let group = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppEnvironment.appGroupID) {
             self.directory = group.appendingPathComponent("Doomscore", isDirectory: true)
+            isSharedContainer = true
         } else {
             // Unit tests / misconfigured entitlements: fall back to a private folder.
             self.directory = FileManager.default.temporaryDirectory.appendingPathComponent("Doomscore", isDirectory: true)
+            isSharedContainer = false
         }
         try? FileManager.default.createDirectory(
             at: self.directory,
@@ -42,13 +51,8 @@ final class SharedStore: @unchecked Sendable {
     // MARK: Generic access
 
     func read<T: Decodable>(_ type: T.Type, from file: File) -> T? {
-        var result: T?
-        var coordinationError: NSError?
-        NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: url(for: file), options: [], error: &coordinationError) { url in
-            guard let data = try? Data(contentsOf: url) else { return }
-            result = try? JSONCoding.decoder.decode(T.self, from: data)
-        }
-        return result
+        guard let data = try? Data(contentsOf: url(for: file)) else { return nil }
+        return try? JSONCoding.decoder.decode(T.self, from: data)
     }
 
     func write<T: Encodable>(_ value: T, to file: File) {
@@ -74,6 +78,51 @@ final class SharedStore: @unchecked Sendable {
     /// Cheap change check (no decoding).
     func modificationDate(of file: File) -> Date? {
         (try? FileManager.default.attributesOfItem(atPath: url(for: file).path))?[.modificationDate] as? Date
+    }
+
+    // MARK: Screen Time history (append-only, JSON Lines)
+
+    /// Appends finished days without reading the file — cheap enough for the
+    /// Screen Time extension's 6 MB memory limit.
+    func appendScreenTimeHistory(_ days: [ScreenTimeDay]) {
+        let lines = days.compactMap { try? JSONCoding.encoder.encode($0) }
+        guard !lines.isEmpty else { return }
+        var chunk = Data()
+        for line in lines {
+            chunk.append(line)
+            chunk.append(0x0A)
+        }
+        var coordinationError: NSError?
+        NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: url(for: .screenTimeHistory), options: .forMerging, error: &coordinationError) { url in
+            if !FileManager.default.fileExists(atPath: url.path) {
+                FileManager.default.createFile(atPath: url.path, contents: nil, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+            }
+            guard let handle = try? FileHandle(forWritingTo: url) else { return }
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: chunk)
+        }
+    }
+
+    /// Finished days (app only — can be large). The latest copy of a day wins.
+    func screenTimeHistory() -> [DayKey: ScreenTimeDay] {
+        guard let data = try? Data(contentsOf: url(for: .screenTimeHistory)) else { return [:] }
+        var days: [DayKey: ScreenTimeDay] = [:]
+        for line in data.split(separator: 0x0A) where !line.isEmpty {
+            guard let day = try? JSONCoding.decoder.decode(ScreenTimeDay.self, from: Data(line)) else { continue }
+            if let existing = days[day.day], existing.updatedAt > day.updatedAt { continue }
+            days[day.day] = day
+        }
+        return days
+    }
+
+    /// Every Screen Time day: history plus the live state (which wins).
+    func screenTimeDays() -> [DayKey: ScreenTimeDay] {
+        var days = screenTimeHistory()
+        if let state = screenTime {
+            for day in state.days.values { days[day.day] = day }
+        }
+        return days
     }
 
     func remove(_ file: File) {
@@ -112,10 +161,11 @@ final class SharedStore: @unchecked Sendable {
     }
 
     /// Everything the user sees: exact counts plus Screen Time estimates.
+    /// Reads the whole history — app and widgets only, never the Screen Time
+    /// extension.
     func mergedLedger() -> Ledger {
         var ledger = exactLedger()
-        guard let screenTime else { return ledger }
-        for day in screenTime.days.values {
+        for day in screenTimeDays().values {
             ledger[day.day] = day.merged(into: ledger[day.day] ?? DayRecord(day: day.day))
         }
         return ledger

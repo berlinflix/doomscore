@@ -18,6 +18,7 @@ enum AppEnvironment {
     static let supabaseURL: URL? = string("DSSupabaseURL").flatMap(URL.init(string:))
     static let supabaseAnonKey: String? = string("DSSupabaseAnonKey")
     static let inviteBaseURL: URL? = string("DSInviteBaseURL").flatMap(URL.init(string:))
+    static let privacyPolicyURL: URL? = string("DSPrivacyPolicyURL").flatMap(URL.init(string:))
     static let remoteConfigURL: URL? = string("DSRemoteConfigURL").flatMap(URL.init(string:))
 
     static let urlScheme = "doomscore"

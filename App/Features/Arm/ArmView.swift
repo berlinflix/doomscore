@@ -51,7 +51,7 @@ struct ArmView: View {
                         phase = .waiting
                         picker.trigger()
                     } label: {
-                        Label("start precise mode", systemImage: "record.circle.fill")
+                        Label("start exact mode", systemImage: "record.circle.fill")
                     }
                     .buttonStyle(ChunkyButtonStyle())
                     Text("then tap **Start Broadcast** · stop anytime from the red status pill")
@@ -90,9 +90,9 @@ struct ArmView: View {
 
     private var title: String {
         switch phase {
-        case .ready: "precise mode 🎯"
+        case .ready: "exact mode 🎯"
         case .waiting: "tap Start Broadcast 👇"
-        case .live: "precise mode is on ✅"
+        case .live: "exact mode is on ✅"
         }
     }
 

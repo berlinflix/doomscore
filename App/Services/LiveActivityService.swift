@@ -53,7 +53,7 @@ final class LiveActivityService {
     /// Shows (or refreshes) the counter in the Dynamic Island.
     func showCounting(app: SourceApp?, armed: Bool) async {
         guard isEnabled else { return }
-        let state = makeState(armed: armed, app: app)
+        let state = await currentState(armed: armed, app: app)
         let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(state.estimated ? 5 * 60 : 30 * 60))
         if let activity = current {
             await activity.update(content)
@@ -74,14 +74,14 @@ final class LiveActivityService {
     /// Refreshes an existing activity from the latest shared state.
     func refresh() async {
         guard let activity = current else { return }
-        let state = makeState(armed: isCounting, app: nil)
+        let state = await currentState(armed: nil, app: nil)
         await activity.update(ActivityContent(state: state, staleDate: Date().addingTimeInterval(state.estimated ? 5 * 60 : 30 * 60)))
     }
 
     /// Reels app closed: show the final count for a few minutes, then go away.
     func endSession() async {
+        let final = await currentState(armed: nil, app: nil)
         for activity in Activity<DoomActivityAttributes>.activities {
-            let final = makeState(armed: isCounting, app: nil)
             await activity.end(ActivityContent(state: final, staleDate: nil), dismissalPolicy: .after(Date().addingTimeInterval(4 * 60)))
             if let token = updateTokens.removeValue(forKey: activity.id) {
                 await IngestClient.shared.unregisterActivityToken(token)
@@ -121,12 +121,16 @@ final class LiveActivityService {
         }
     }
 
-    /// Precise mode is running or Screen Time is tracking.
-    private var isCounting: Bool {
-        SharedStore.shared.isArmed() || ScreenTimeService.shared.isTracking
+    /// Builds the content off the main thread (it reads the shared files).
+    /// `armed: nil` means "whatever is counting right now".
+    private func currentState(armed: Bool?, app: SourceApp?) async -> DoomActivityAttributes.ContentState {
+        let tracking = ScreenTimeService.shared.isTracking
+        return await Task.detached(priority: .userInitiated) {
+            Self.makeState(armed: armed, app: app, screenTimeTracking: tracking)
+        }.value
     }
 
-    private func makeState(armed: Bool, app: SourceApp?) -> DoomActivityAttributes.ContentState {
+    nonisolated private static func makeState(armed: Bool?, app: SourceApp?, screenTimeTracking: Bool) -> DoomActivityAttributes.ContentState {
         let store = SharedStore.shared
         let settings = SharedSettings.shared
         let now = Date()
@@ -134,6 +138,7 @@ final class LiveActivityService {
         let ledger = store.mergedLedger()
         let today = ledger[DayKey(now)] ?? DayRecord(day: DayKey(now))
         let precise = live?.isArmed(now: now) == true
+        let armed = armed ?? (precise || screenTimeTracking)
 
         var session = 0
         var start: Date?
@@ -156,7 +161,7 @@ final class LiveActivityService {
             armed: armed,
             appName: (app ?? live?.currentApp ?? today.topApp ?? .instagram).displayName,
             updatedAt: now.timeIntervalSince1970,
-            estimated: !precise && (today.isEstimated || ScreenTimeService.shared.isTracking),
+            estimated: !precise && (today.isEstimated || screenTimeTracking),
             sessionStart: start?.timeIntervalSince1970 ?? 0,
             streak: streak.current
         )

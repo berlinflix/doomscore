@@ -204,7 +204,7 @@ struct StatsView: View {
 
     private var wrappedCards: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionTitle(title: "wrapped 📼")
+            SectionTitle(title: "recaps 📼")
             HStack(spacing: 10) {
                 wrappedButton("week", emoji: "🗓️", period: .week, colors: [Theme.lime, Theme.cyan])
                 wrappedButton("month", emoji: "🌙", period: .month, colors: [Theme.pink, Theme.violet])

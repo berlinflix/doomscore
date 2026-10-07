@@ -17,8 +17,8 @@ struct DoomShortcuts: AppShortcutsProvider {
         )
         AppShortcut(
             intent: ArmCounterIntent(),
-            phrases: ["Start counting reels with \(.applicationName)", "Arm \(.applicationName)"],
-            shortTitle: "Start Counting",
+            phrases: ["Open \(.applicationName)", "Show my \(.applicationName)"],
+            shortTitle: "Open Doomscore",
             systemImageName: "flame.fill"
         )
         AppShortcut(

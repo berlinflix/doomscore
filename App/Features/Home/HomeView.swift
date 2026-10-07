@@ -11,8 +11,8 @@ struct HomeView: View {
                 header
                 hero
                 if model.trackingMode == .off { ScreenTimeConnectCard(showsTikTok: false) }
+                if model.trackingMode == .auto && model.paceSource == .guess { paceCard }
                 if model.trackingMode == .auto && !model.automationVerified { autoStartCard }
-                if model.trackingMode != .precise { preciseCard }
                 appChips
                 statsGrid
                 hourlyCard
@@ -97,7 +97,7 @@ struct HomeView: View {
         let pace = model.pace(for: .instagram)
         return HStack(spacing: 6) {
             Image(systemName: "hourglass")
-            Text("\(today.screenMinutes) min of scrolling × \(String(format: "%.1f", pace))/min \(model.isPaceCalibrated ? "(your pace)" : "(est.)")")
+            Text("\(today.screenMinutes) min of scrolling × \(String(format: "%.1f", pace))/min (\(model.paceSource == .guess ? "est." : "your pace"))")
         }
         .font(Theme.body(12, weight: .bold))
         .foregroundStyle(Theme.cyan)
@@ -106,20 +106,19 @@ struct HomeView: View {
         .background(Capsule().fill(Theme.cyan.opacity(0.1)))
     }
 
-    private var preciseCard: some View {
+    /// The pace test: the no-screen-recording way to make the count accurate.
+    private var paceCard: some View {
         Button {
-            router.sheet = .arm(auto: false, returnTo: nil)
+            router.sheet = .paceTest
         } label: {
             Card {
                 HStack(spacing: 14) {
-                    Text("🎯").font(.system(size: 28))
+                    Text("⏱️").font(.system(size: 28))
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("precise mode")
+                        Text("dial in your pace")
                             .font(Theme.body(16, weight: .heavy))
                             .foregroundStyle(Theme.text)
-                        Text(model.trackingMode == .off
-                             ? "count every single reel with a screen broadcast — no Screen Time needed"
-                             : "optional: exact count for a session, skips ads + rewatches, learns your pace")
+                        Text("30-sec test: scroll 20 reels, we time you. makes your count way more accurate — no screen recording")
                             .font(Theme.body(13, weight: .semibold))
                             .foregroundStyle(Theme.textDim)
                     }
@@ -188,7 +187,7 @@ struct HomeView: View {
                 StatTile(
                     emoji: "🎚️",
                     value: String(format: "%.1f/min", model.pace(for: .instagram)),
-                    label: model.isPaceCalibrated ? "your pace (from precise mode)" : "starting pace — precise mode tunes it",
+                    label: model.paceSource == .guess ? "starting pace — take the pace test" : "your measured pace",
                     tint: Theme.pink
                 )
             }
@@ -238,7 +237,7 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("your week in doom 📼")
                         .font(Theme.body(20, weight: .black))
-                    Text("wrapped-style recap. screenshot-ready.")
+                    Text("story-style recap. screenshot-ready.")
                         .font(Theme.body(14, weight: .semibold))
                         .opacity(0.8)
                 }

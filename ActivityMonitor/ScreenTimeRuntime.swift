@@ -1,64 +1,81 @@
 import DeviceActivity
 import Foundation
-import WidgetKit
 
 /// What the monitor extension does with each Screen Time callback.
+///
+/// iOS kills DeviceActivityMonitor extensions that go over 6 MB of memory,
+/// so this stays tiny: no SwiftUI/WidgetKit, no history decoding (the state
+/// file only ever holds today and yesterday), the count is saved before
+/// anything optional runs, and the server ping is small and infrequent.
 enum ScreenTimeRuntime {
-    private static let store = SharedStore.shared
-    private static let settings = SharedSettings.shared
-
     /// A tracked app reached another minute of use.
     static func thresholdReached(_ name: String, at now: Date) {
-        guard settings.screenTimeEnabled, let parsed = ScreenTimeLadder.parse(name) else { return }
-        // While precise mode is counting, its exact numbers win; Screen Time
-        // only records the minutes (used to calibrate the pace).
-        let preciseActive = store.isArmed(now: now)
+        let settings = SharedSettings.shared
+        settings.noteMonitorCallback(name, at: now)
+        guard settings.screenTimeEnabled, let parsed = ScreenTimeLadder.parse(name) else {
+            settings.noteMonitorOutcome("ignored (tracking off)")
+            return
+        }
+        let store = SharedStore.shared
+        // While exact mode is counting, its numbers win; Screen Time only
+        // records the minutes (used to calibrate the pace).
+        let live = store.live
+        let preciseActive = live?.isArmed(now: now) ?? false
         let hint = store.hint
         let openedAt = (hint?.app == parsed.slot.app && hint?.isForeground(now: now) == true) ? hint?.openedAt : nil
         let event = ScreenTimeEstimator.Event(slot: parsed.slot, threshold: parsed.minutes, at: now, openedAt: openedAt)
         let pace = settings.pace(for: parsed.slot)
+        let todayKey = DayKey(now)
 
         var outcome = ScreenTimeEstimator.Outcome.duplicate
         var session: ScreenTimeSession?
+        var today: ScreenTimeDay?
+        var archived: [ScreenTimeDay] = []
         var shouldSync = false
         store.update(ScreenTimeState.self, in: .screenTime, default: { ScreenTimeState() }) { state in
             outcome = ScreenTimeEstimator.apply(event, to: &state, pace: pace, preciseActive: preciseActive)
+            archived = ScreenTimeEstimator.archiveOldDays(in: &state, today: todayKey)
             session = state.session
+            today = state[todayKey]
             guard case .accepted(_, let started) = outcome else { return }
-            // Late callbacks arrive in bursts; one server ping per burst is plenty.
-            if started || now.timeIntervalSince(state.lastIngestAt ?? .distantPast) >= 3 {
+            // Pings go out when a visit starts and then every ~2 minutes.
+            if started || now.timeIntervalSince(state.lastIngestAt ?? .distantPast) >= 110 {
                 state.lastIngestAt = now
                 shouldSync = true
             }
         }
+        if !archived.isEmpty { store.appendScreenTimeHistory(archived) }
 
         switch outcome {
-        case .accepted(_, let sessionStarted):
+        case .accepted(let delta, let sessionStarted):
+            settings.noteMonitorOutcome("+\(delta) min\(sessionStarted ? " (new visit)" : "")")
             DarwinCenter.shared.post(DarwinName.screenTimeChanged)
             armWatchdog(now: now)
-            reloadWidgets(now: now, force: sessionStarted)
             if shouldSync, !preciseActive {
-                sync(now: now, session: session, sessionStarted: sessionStarted, ended: false)
+                sync(now: now, today: today, exact: live, session: session, sessionStarted: sessionStarted, ended: false)
             }
         case .rejected(let reason):
-            Log.screenTime.notice("threshold rejected: \(reason.rawValue, privacy: .public)")
+            settings.noteMonitorOutcome("rejected: \(reason.rawValue)")
         case .duplicate:
-            break
+            settings.noteMonitorOutcome("duplicate")
         }
     }
 
     /// No minute mark for a few minutes: the visit is over.
     static func watchdogFired(at now: Date) {
         DeviceActivityCenter().stopMonitoring([DeviceActivityName(ScreenTimeLadder.watchdogActivity)])
+        let store = SharedStore.shared
         var ended: ScreenTimeSession?
+        var today: ScreenTimeDay?
         store.update(ScreenTimeState.self, in: .screenTime, default: { ScreenTimeState() }) { state in
             ended = ScreenTimeEstimator.endSession(in: &state, at: now)
+            today = state[DayKey(now)]
         }
         guard let ended else { return }
         DarwinCenter.shared.post(DarwinName.screenTimeChanged)
-        reloadWidgets(now: now, force: true)
-        guard !store.isArmed(now: now) else { return }
-        sync(now: now, session: ended, sessionStarted: false, ended: true)
+        let live = store.live
+        guard live?.isArmed(now: now) != true else { return }
+        sync(now: now, today: today, exact: live, session: ended, sessionStarted: false, ended: true)
     }
 
     // MARK: Internals
@@ -75,43 +92,32 @@ enum ScreenTimeRuntime {
             intervalEnd: calendar.dateComponents(parts, from: end),
             repeats: false
         )
-        do {
-            try DeviceActivityCenter().startMonitoring(DeviceActivityName(ScreenTimeLadder.watchdogActivity), during: schedule)
-        } catch {
-            Log.screenTime.error("watchdog failed: \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
-    private static func reloadWidgets(now: Date, force: Bool) {
-        // WidgetKit budgets reloads from extensions; keep them rare.
-        if !force, let last = settings.screenTimeWidgetReloadAt, now.timeIntervalSince(last) < 10 * 60 { return }
-        settings.screenTimeWidgetReloadAt = now
-        WidgetCenter.shared.reloadAllTimelines()
+        try? DeviceActivityCenter().startMonitoring(DeviceActivityName(ScreenTimeLadder.watchdogActivity), during: schedule)
     }
 
     /// Uploads today's totals and mirrors the count to the Dynamic Island
-    /// (the backend turns it into an ActivityKit push).
-    private static func sync(now: Date, session: ScreenTimeSession?, sessionStarted: Bool, ended: Bool) {
+    /// (the backend turns it into an ActivityKit push). Built from small
+    /// files only — never the full history.
+    private static func sync(now: Date, today: ScreenTimeDay?, exact live: LiveState?, session: ScreenTimeSession?, sessionStarted: Bool, ended: Bool) {
         let client = IngestClient.shared
         guard client.isReady else { return }
-        let ledger = store.mergedLedger()
+        let settings = SharedSettings.shared
         let key = DayKey(now)
-        let today = ledger[key] ?? DayRecord(day: key)
-        let goal = settings.dailyGoal
-        let streak = StatsEngine.streak(ledger: ledger, goal: goal, installDate: settings.installDate, now: now)
-        let live = IngestPayload.Live(
-            todayCount: today.total,
+        let exact = (live?.today.day == key ? live?.today : nil) ?? DayRecord(day: key)
+        let shown = today.map { $0.merged(into: exact) } ?? exact
+        let payload = IngestPayload.make(for: shown, live: IngestPayload.Live(
+            todayCount: shown.total,
             sessionCount: Int((session?.reels ?? 0).rounded()),
-            goal: goal,
+            goal: settings.dailyGoal,
             armed: true,
             appName: (session?.app ?? .instagram).displayName,
             sessionStarted: sessionStarted,
             estimated: true,
             sessionStart: session?.startedAt.timeIntervalSince1970,
-            streak: streak.current,
+            streak: settings.cachedStreak,
             ended: ended
-        )
+        ))
         // The extension is torn down when this callback returns, so wait for the request.
-        client.sendBlocking(IngestPayload.make(for: today, live: live), timeout: 3.5)
+        client.sendBlocking(payload, timeout: 3.5)
     }
 }

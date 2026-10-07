@@ -7,10 +7,10 @@ struct ArmControl: ControlWidget {
     var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(kind: "app.doomscore.arm") {
             ControlWidgetButton(action: ArmCounterIntent()) {
-                Label("Count Reels", systemImage: "flame.fill")
+                Label("How Cooked Am I", systemImage: "flame.fill")
             }
         }
-        .displayName("Count Reels")
-        .description("Jump straight to arming the Doomscore counter.")
+        .displayName("How Cooked Am I")
+        .description("Open Doomscore on today's reel count.")
     }
 }

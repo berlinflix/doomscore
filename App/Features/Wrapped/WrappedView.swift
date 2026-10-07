@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Spotify-Wrapped-style story recap for a week / month / year.
+/// Story-style recap for a week / month / year.
 /// Tap right = next, tap left = back, hold = pause.
 struct WrappedView: View {
     let request: Router.WrappedRequest
@@ -50,7 +50,7 @@ struct WrappedView: View {
             VStack(spacing: 14) {
                 progressBars(count: slides.count)
                 HStack {
-                    Text("doomscore wrapped")
+                    Text("doomscore recap")
                         .font(Theme.body(14, weight: .heavy))
                         .foregroundStyle(.white.opacity(0.85))
                     Spacer()
@@ -172,7 +172,7 @@ struct WrappedView: View {
                         .frame(maxHeight: 440)
                         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                         .shadow(radius: 20)
-                    ShareLink(item: shareImage, preview: SharePreview("my doomscore wrapped", image: shareImage)) {
+                    ShareLink(item: shareImage, preview: SharePreview("my doomscore recap", image: shareImage)) {
                         Label("share to your story", systemImage: "square.and.arrow.up")
                     }
                     .buttonStyle(ChunkyButtonStyle())

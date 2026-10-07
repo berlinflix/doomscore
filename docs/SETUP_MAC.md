@@ -76,10 +76,12 @@ open Doomscore.xcodeproj
    Dynamic Island goes up (≈ = estimate). The island appears after the first minute; it
    needs a battle profile (device token) for live updates.
 4. Widgets: long-press the Home Screen → Edit → Add Widget → Doomscore.
-   Control Center: swipe down → **+** → Add a Control → **Count Reels** (precise mode).
-5. Optional **precise mode** (exact count, skips ads + rewatches): Home → precise mode →
-   **Start Broadcast**. A red pill shows up. Each session also teaches auto mode your pace.
-6. If precise counts look off: Settings (gear) → advanced → detector diagnostics → open detector lab.
+   Control Center: swipe down → **+** → Add a Control → **How Cooked Am I**.
+5. Home → **dial in your pace**: open Instagram, scroll ~20 reels, come back, enter the number.
+6. If the count doesn't move: Settings (gear) → advanced → **Screen Time diagnostics**. After
+   2–3 minutes in Instagram, "callbacks received" should be above 0.
+7. Optional exact mode (screen broadcast, exact count): Settings → advanced → exact mode → start.
+   The app never offers it anywhere else.
 
 ## 6. Optional: instant island when Instagram opens
 
@@ -134,7 +136,7 @@ and never commit it. If you ever lose it, create a new APNs key and replace both
 
 - **Screen Time monitor:** pick the **DoomscoreActivityMonitor** scheme → Run → choose Doomscore,
   then use Instagram. Logs are in Console.app (subsystem `app.doomscore`, category `screen-time`).
-- **Reel detector (precise mode):** pick the **DoomscoreBroadcast** scheme → Run → choose Doomscore →
+- **Reel detector (exact mode):** pick the **DoomscoreBroadcast** scheme → Run → choose Doomscore →
   start a broadcast. Logs are in Console.app (subsystem `app.doomscore`).
 - **Unit tests:** pick any iPhone Simulator → **⌘U**.
 
@@ -153,8 +155,8 @@ and never commit it. If you ever lose it, create a new APNs key and replace both
 | "No Account for Team" | Xcode → Settings → Accounts → sign in, then pick the team in each target |
 | Profile missing an entitlement | Developer portal → Identifiers → the App ID → enable that capability → Xcode **Try Again** |
 | Doomscore missing from the Start Broadcast sheet | Fix DoomscoreBroadcast signing, delete the app from the phone, run again |
-| Count stays at 0 (auto mode) | Settings → auto mode: Screen Time connected, Instagram picked, "track automatically" on. Use Instagram for a full minute |
-| Count stays at 0 (precise mode) | Detector lab; also Settings → "precise mode counts these apps" |
+| Count stays at 0 (auto mode) | Settings → advanced → Screen Time diagnostics. "callbacks received" 0 after 3+ minutes in Instagram = iOS isn't waking the extension: rebuild, and check Family Controls + App Groups on the activitymonitor App ID |
+| Count stays at 0 (exact mode) | Detector lab; also Settings → advanced → exact mode → "counts these apps" |
 | Dynamic Island doesn't update by itself | Join battles once (creates the device token), and turn on More Frequent Updates |
 | Doomscore actions missing in Shortcuts | Open the app once, then force-quit and reopen Shortcuts |
 | Invite links open Safari instead of the app | Check Apple's CDN URL from step 7 shows the JSON, then reinstall the app (iOS fetches the file at install time) |

@@ -39,6 +39,9 @@ struct RootView: View {
             SettingsView()
         case .setupGuide:
             NavigationStack { AutomationGuideView(showsDoneButton: true) }
+        case .paceTest:
+            PaceTestView()
+                .presentationDetents([.large])
         case .joinBattle:
             JoinBattleView()
         case .invite(let code):

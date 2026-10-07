@@ -38,8 +38,8 @@ sequenceDiagram
 * **Authorization:** `AuthorizationCenter.requestAuthorization(for: .individual)` (Face ID,
   once). App picks are opaque `ApplicationToken`s — Doomscore never learns bundle IDs or
   anything about content.
-* **Thresholds:** one `DeviceActivityEvent` per minute for the first hour, then every 2, 5
-  and 10 minutes up to 16 h (228 per app), on a daily 00:00–23:59 schedule, with
+* **Thresholds:** one `DeviceActivityEvent` per minute for the first 20 minutes, then every 2, 5,
+  10 and 20 minutes up to 16 h (118 per app), on a daily 00:00–23:59 schedule, with
   `includesPastActivity: false`. Names are `ig.37` / `tt.12` (`ScreenTimeLadder`).
 * **Estimator (`ScreenTimeEstimator`, unit-tested):** pure logic shared by app and extension.
   * Thresholds count from the moment monitoring was (re)registered on that day, from
@@ -55,13 +55,20 @@ sequenceDiagram
     start when available.
 * **Pace:** onboarding quiz (5.0 / 3.5 / 1.5 reels per IG minute; TikTok 5.0). Each finished
   day with ≥ 8 covered minutes calibrates it: exact reels ÷ covered minutes, blended 60/40.
+* **Memory:** DeviceActivityMonitor extensions are killed above **6 MB**. The extension links no
+  SwiftUI/WidgetKit, saves the count before anything optional, and only decodes a state file
+  holding today and yesterday; older days go to an append-only `screen-time-history.jsonl`.
+  Server pings happen at visit start and then every ~2 minutes. A heartbeat in the App Group
+  (Settings → advanced → Screen Time diagnostics) shows whether iOS is waking it at all.
+* **Pace test:** no screen recording — the user scrolls ~20 reels, the app times the trip and
+  stores the swipe speed; pace = swipe speed × the scroll-style share of Instagram time.
 * **Watchdog:** each minute mark re-arms a one-off 15-minute schedule starting 3 minutes
   later. iOS calls `intervalDidStart` once the phone is in use, which ends the visit.
 * **Limits:** Screen Time reports app minutes only — not reels, ads or rewatches — so auto
   mode is an estimate (marked ≈ everywhere). Distribution needs Apple's Family Controls
   entitlement (see APP_REVIEW.md).
 
-## 2. Precise mode (Broadcast Upload Extension, optional)
+## 2. Exact mode (Broadcast Upload Extension, opt-in only)
 
 ```mermaid
 flowchart LR

@@ -14,29 +14,54 @@ enum NotificationService {
         return status == .authorized || status == .provisional
     }
 
-    /// Fallback when the automation can't open the arm screen by itself
-    /// (iOS < 26): a time-sensitive nudge on top of the reels app.
-    static func sendArmNudge(for app: SourceApp) async {
+    /// A reels app opened while nothing is tracking: a quiet reminder to
+    /// connect Screen Time (never a screen-broadcast prompt).
+    static func sendTrackingNudge(for app: SourceApp) async {
         let settings = SharedSettings.shared
         guard settings.nudgesEnabled else { return }
+        if let last = settings.lastNudgeAt, Date().timeIntervalSince(last) < 60 * 60 { return }
+        guard await isAuthorized() else { return }
+        settings.lastNudgeAt = Date()
+
+        let content = UNMutableNotificationContent()
+        content.title = "doomscore isn't tracking 👀"
+        content.body = "connect Screen Time once and your \(app.feedName) count runs by itself"
+        content.sound = nil
+        content.interruptionLevel = .active
+        content.threadIdentifier = "tracking-nudge"
+        content.userInfo = ["route": "today"]
+        let request = UNNotificationRequest(identifier: "tracking-nudge", content: content, trigger: nil)
+        try? await UNUserNotificationCenter.current().add(request)
+    }
+
+    /// Opt-in exact mode (Settings → exact mode): fallback when the
+    /// automation can't bring up the arm screen by itself (iOS < 26).
+    static func sendExactModeNudge(for app: SourceApp) async {
+        let settings = SharedSettings.shared
+        guard settings.nudgesEnabled, settings.preciseAutoPrompt else { return }
         if let last = settings.lastNudgeAt, Date().timeIntervalSince(last) < 10 * 60 { return }
         guard await isAuthorized() else { return }
         settings.lastNudgeAt = Date()
 
         let content = UNMutableNotificationContent()
-        content.title = "not tracking right now 👀"
-        content.body = "tap to count your \(app.feedName) exactly — takes 2 sec"
+        content.title = "exact mode is off"
+        content.body = "tap to count your \(app.feedName) exactly"
         content.sound = nil
-        content.interruptionLevel = .timeSensitive
-        content.relevanceScore = 1
+        content.interruptionLevel = .active
         content.threadIdentifier = "arm-nudge"
-        content.userInfo = ["route": "arm?auto=1&return=\(app.rawValue)"]
+        content.userInfo = ["route": "arm?return=\(app.rawValue)"]
         let request = UNNotificationRequest(identifier: "arm-nudge", content: content, trigger: nil)
         try? await UNUserNotificationCenter.current().add(request)
     }
 
+    static func cancelRecaps() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["daily-recap", "weekly-wrapped"])
+    }
+
     /// Nightly damage report + Sunday recap. Static copy, deep-linked.
+    /// Off switch: Settings → "nightly report + weekly recap".
     static func scheduleRecaps() {
+        guard SharedSettings.shared.recapsEnabled else { return }
         let center = UNUserNotificationCenter.current()
 
         let daily = UNMutableNotificationContent()
@@ -54,7 +79,7 @@ enum NotificationService {
 
         let weekly = UNMutableNotificationContent()
         weekly.title = "your week in doom is ready 📼"
-        weekly.body = "tap for your weekly wrapped"
+        weekly.body = "tap for your weekly recap"
         weekly.userInfo = ["route": "wrapped?period=week"]
         var weeklyTime = DateComponents()
         weeklyTime.weekday = 1
