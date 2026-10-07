@@ -5,22 +5,17 @@
 - **Apple Developer portal** (team `5862BR3S2S`). Your GridCC identifiers weren't touched.
   - App Group `group.com.gridcc.doomscore`.
   - App ID `com.gridcc.doomscore` with App Groups, Associated Domains, Push Notifications,
-    Sign In with Apple and Time Sensitive Notifications.
+    Sign In with Apple, Time Sensitive Notifications and Family Controls (Development).
+  - App ID `com.gridcc.doomscore.activitymonitor` ("Doomscore Screen Time") with App Groups
+    and Family Controls (Development).
   - App IDs `com.gridcc.doomscore.widgets` and `com.gridcc.doomscore.broadcast`, with App Groups.
-  - All three App IDs are linked to the App Group.
+  - All four App IDs are linked to the App Group.
 - **`Config/Base.xcconfig`** already holds the Team ID, bundle IDs, App Group and the
   `doomscore.gridcc.tech` domain. There's nothing to edit before your first build.
 
-### Portal additions for auto mode (Screen Time)
-
-- `com.gridcc.doomscore` → also tick **Family Controls (Development)**.
-- New App ID `com.gridcc.doomscore.activitymonitor` ("Doomscore Screen Time") with
-  **App Groups** (`group.com.gridcc.doomscore`) and **Family Controls (Development)**.
-
-Xcode's automatic signing usually does both by itself on the first ⌘R. If it says a profile
-doesn't include `com.apple.developer.family-controls`, make the changes above in the portal,
-then press **Try Again** in Xcode. TestFlight/App Store builds also need Apple's distribution
-approval (see [APP_REVIEW.md](APP_REVIEW.md)).
+Adding Family Controls invalidated the old development profiles; Xcode's automatic signing
+makes new ones on the next ⌘R (press **Try Again** if it asks). TestFlight/App Store builds also
+need Apple's distribution approval of Family Controls (see [APP_REVIEW.md](APP_REVIEW.md)).
 
 ## 1. Set up the Mac (once)
 

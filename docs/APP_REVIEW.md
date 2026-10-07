@@ -1,6 +1,6 @@
 # App Store submission notes
 
-## Capabilities (team 5862BR3S2S)
+## Capabilities (team 5862BR3S2S, all registered)
 
 * App ID `com.gridcc.doomscore`: App Groups, Sign In with Apple, Push Notifications,
   Associated Domains, Time Sensitive Notifications, **Family Controls** (+ In-App Purchase, on by default).
